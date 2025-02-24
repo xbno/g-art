@@ -47,12 +47,16 @@ function setup() {
 }
 
 function draw() {
-    // Step 1: Draw fills
-    strokeWeight(1);
+    // Set blend mode to DIFFERENCE for fills
+    blendMode(DIFFERENCE);
+    // Step 1: Draw fills without stroke
+    noStroke();
     for (let shape of shapes) {
         fill(shape.color);
         drawShapeFill(shape);
     }
+    // Reset blend mode to BLEND for outlines
+    blendMode(BLEND);
 
     // Step 2: Get all outline segments
     let allSegments = [];
@@ -79,14 +83,12 @@ function draw() {
 
 // Draw the fill of a shape
 function drawShapeFill(shape) {
-    // blendMode(OVERLAY);
     beginShape();
     let points = getShapePoints(shape);
     for (let p of points) {
         vertex(p.x, p.y);
     }
     endShape(CLOSE);
-    // blendMode(BLEND); // Reset blend mode
 }
 
 // Get the points defining a shape's outline
