@@ -1,48 +1,67 @@
 let shapes = [];
 
 function setup() {
-    createCanvas(800, 600);
+    createCanvas(1200, 1800);
     background(255); // White background
 
-    // Generate 3 of each shape
-    for (let i = 0; i < 3; i++) {
-        // Circle
-        let x = random(100, width - 100);
-        let y = random(100, height - 100);
-        let diameter = random(50, 200);
-        shapes.push({
-            type: 'circle',
-            x: x,
-            y: y,
-            size: diameter,
-            color: color(random(255), random(255), random(255))
-        });
+    // Generate k random shapes
+    let k = floor(random(10, 15)); // Random number of total shapes
+    for (let i = 0; i < k; i++) {
+        let x = random(100, width - 200);
+        let y = random(100, height - 200);
 
-        // Square
-        x = random(100, width - 100);
-        y = random(100, height - 100);
-        let size = random(50, 200);
-        shapes.push({
-            type: 'square',
-            x: x,
-            y: y,
-            size: size,
-            color: color(random(255), random(255), random(255))
-        });
+        // Randomly choose shape type
+        let shapeType = random(['circle', 'square', 'triangle']);
+        let pad = 50;
 
-        // Equilateral Triangle
-        x = random(100, width - 100);
-        y = random(100, height - 100);
-        let R = random(25, 100);
-        let rotation = floor(random(4)) * HALF_PI;
-        shapes.push({
-            type: 'triangle',
-            x: x,
-            y: y,
-            size: R,
-            rotation: rotation,
-            color: color(random(255), random(255), random(255))
-        });
+        if (shapeType === 'circle') {
+            let diameter = random(50, 240);
+            // Check if circle fits within canvas with padding
+            if (x - diameter / 2 >= pad && x + diameter / 2 <= width - pad &&
+                y - diameter / 2 >= pad && y + diameter / 2 <= height - pad) {
+                shapes.push({
+                    type: 'circle',
+                    x: x,
+                    y: y,
+                    size: diameter,
+                    color: color(random(255), random(255), random(255))
+                });
+            }
+        } else if (shapeType === 'square') {
+            let size = random(50, 400);
+            // Check if square fits within canvas with padding
+            if (x - size / 2 >= pad && x + size / 2 <= width - pad &&
+                y - size / 2 >= pad && y + size / 2 <= height - pad) {
+                shapes.push({
+                    type: 'square',
+                    x: x,
+                    y: y,
+                    size: size,
+                    color: color(random(255), random(255), random(255))
+                });
+            }
+        } else { // triangle
+            let R = random(25, 400);
+            let rotation = floor(random(4)) * HALF_PI;
+            // Check if triangle fits within canvas with padding
+            // Triangle points are at (x,y-R), (x-R*cos(PI/6),y+R*sin(PI/6)), (x+R*cos(PI/6),y+R*sin(PI/6))
+            let points = [
+                { x: x, y: y - R },
+                { x: x - R * cos(PI / 6), y: y + R * sin(PI / 6) },
+                { x: x + R * cos(PI / 6), y: y + R * sin(PI / 6) }
+            ];
+            let fits = points.every(p => p.x >= pad && p.x <= width - pad && p.y >= pad && p.y <= height - pad);
+            if (fits) {
+                shapes.push({
+                    type: 'triangle',
+                    x: x,
+                    y: y,
+                    size: R,
+                    rotation: rotation,
+                    color: color(random(255), random(255), random(255))
+                });
+            }
+        }
     }
 }
 
@@ -67,6 +86,11 @@ function draw() {
 
     // Step 3: Split segments at intersections
     let splitSegments = splitSegmentsAtIntersections(allSegments);
+    // Make segments progressively darker
+    for (let i = 0; i < splitSegments.length; i++) {
+        let grayValue = map(i, 0, splitSegments.length - 1, 200, 50);
+        splitSegments[i].color = color(grayValue);
+    }
 
     // Step 4: Filter out inner segments
     let outerSegments = filterOuterSegments(splitSegments);
@@ -84,12 +108,131 @@ function draw() {
 // Draw the fill of a shape
 function drawShapeFill(shape) {
     beginShape();
+    fill(50);
     let points = getShapePoints(shape);
     for (let p of points) {
         vertex(p.x, p.y);
     }
     endShape(CLOSE);
 }
+
+// function drawShapeFill(shape, type = 'dots') {
+//     beginShape();
+//     fill(50);
+//     let points = getShapePoints(shape);
+//     for (let p of points) {
+//         vertex(p.x, p.y);
+//     }
+//     endShape(CLOSE);
+
+//     let minX = Infinity, minY = Infinity;
+//     let maxX = -Infinity, maxY = -Infinity;
+//     for (let p of points) {
+//         minX = min(minX, p.x);
+//         minY = min(minY, p.y);
+//         maxX = max(maxX, p.x);
+//         maxY = max(maxY, p.y);
+//     }
+
+//     push();
+//     fill(shape.color);
+//     noStroke();
+//     let spacing = 5;
+//     for (let x = minX; x < maxX; x += spacing) {
+//         for (let y = minY; y < maxY; y += spacing) {
+//             if (pointInShape(x, y, shape)) {
+//                 circle(x, y, 3);
+//             }
+//         }
+//     }
+//     pop();
+// }
+
+// function drawShapeFill(shape) {
+//     // First create a clipping mask with the shape
+//     beginShape();
+//     fill(50)
+//     let points = getShapePoints(shape);
+//     for (let p of points) {
+//         vertex(p.x, p.y);
+//     }
+//     endShape(CLOSE);
+
+//     // Get bounding box of the shape
+//     let minX = Infinity, minY = Infinity;
+//     let maxX = -Infinity, maxY = -Infinity;
+//     for (let p of points) {
+//         minX = min(minX, p.x);
+//         minY = min(minY, p.y);
+//         maxX = max(maxX, p.x);
+//         maxY = max(maxY, p.y);
+//     }
+
+//     // Draw hatching lines at 45 degrees
+//     push(); // Save current drawing state
+//     stroke(shape.color);
+//     strokeWeight(2);
+//     let spacing = 10; // Space between hatch lines
+//     let diagonal = spacing * sqrt(2); // Adjust spacing for 45 degree lines
+
+//     // Calculate how many lines we need to cover the shape diagonally
+//     let width = maxX - minX;
+//     let height = maxY - minY;
+//     let numLines = ceil((width + height) / diagonal) + 4; // Add padding
+
+//     // Start offset to ensure we cover the whole shape
+//     let startOffset = -diagonal * numLines / 2;
+
+//     for (let i = 0; i < numLines; i++) {
+//         let offset = startOffset + i * diagonal;
+
+//         // Calculate start and end points for a 45-degree line
+//         let startX = minX + offset;
+//         let startY = minY;
+//         let endX = startX + height;
+//         let endY = maxY;
+
+//         // Binary search from top
+//         let topFound = false;
+//         let top = 0, bottom = 1;
+//         for (let j = 0; j < 10; j++) { // 10 iterations for precision
+//             let mid = (top + bottom) / 2;
+//             let testX = startX + (endX - startX) * mid;
+//             let testY = startY + (endY - startY) * mid;
+//             if (pointInShape(testX, testY, shape)) {
+//                 bottom = mid;
+//                 topFound = true;
+//             } else {
+//                 top = mid;
+//             }
+//         }
+
+//         // Binary search from bottom
+//         let bottomFound = false;
+//         top = 0; bottom = 1;
+//         for (let j = 0; j < 10; j++) {
+//             let mid = (top + bottom) / 2;
+//             let testX = endX - (endX - startX) * mid;
+//             let testY = endY - (endY - startY) * mid;
+//             if (pointInShape(testX, testY, shape)) {
+//                 bottom = mid;
+//                 bottomFound = true;
+//             } else {
+//                 top = mid;
+//             }
+//         }
+
+//         if (topFound && bottomFound) {
+//             let lineStartX = startX + (endX - startX) * bottom;
+//             let lineStartY = startY + (endY - startY) * bottom;
+//             let lineEndX = endX - (endX - startX) * bottom;
+//             let lineEndY = endY - (endY - startY) * bottom;
+//             line(lineStartX, lineStartY, lineEndX, lineEndY);
+//         }
+//     }
+//     pop(); // Restore drawing state
+// }
+
 
 // Get the points defining a shape's outline
 function getShapePoints(shape) {
@@ -218,4 +361,11 @@ function filterOuterSegments(segments) {
         }
         return true; // Segment is on the outer edge
     });
+}
+
+function keyPressed() {
+    if (key === 's') {
+        // Save the SVG
+        save("my_blobs_" + Date.now() + ".svg");
+    }
 }
