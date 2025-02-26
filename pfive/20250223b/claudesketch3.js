@@ -1,12 +1,37 @@
+// Global hatching patterns - modify once and used everywhere
+const hatchingPatterns = [
+    // Single angles at 15° increments
+    { angles: [0], spacing: 6 },           // Pattern 0: Horizontal
+    { angles: [-15], spacing: 6 },          // Pattern 1: 15°
+    { angles: [30], spacing: 6 },          // Pattern 2: 30°
+    { angles: [-45], spacing: 6 },          // Pattern 3: 45°
+    { angles: [60], spacing: 6 },          // Pattern 4: 60°
+    { angles: [-75], spacing: 6 },          // Pattern 5: 75°
+    { angles: [90], spacing: 6 },          // Pattern 6: Vertical
+
+    // Perpendicular pairs (90° difference)
+    { angles: [0, 90], spacing: 6 },       // Pattern 7: Grid
+    { angles: [15, 105], spacing: 6 },     // Pattern 8: 15°/105° grid
+    { angles: [30, 60], spacing: 6 },     // Pattern 9: 30°/120° grid
+    { angles: [45, 135], spacing: 6 },     // Pattern 10: 45°/135° grid (diagonal crosshatch)
+
+    // More random combinations
+    { angles: [0, 45], spacing: 6 },       // Pattern 11: Mixed horizontal/diagonal
+    { angles: [30, 75], spacing: 6 },      // Pattern 12: Mixed angles
+    { angles: [15, 60], spacing: 6 },      // Pattern 13: Asymmetric angles
+    { angles: [0, 30, 60, 90], spacing: 20 }, // Pattern 14: Multiple angles
+    { angles: [15, 45, 75], spacing: 18 }   // Pattern 15: Triple angles
+];
+
 let shapes = [];
-let renderMode = 1; // Default: 1 = layered, 2 = grid effect, 3 = exclusive, 4 = color-consistent exclusive
+let renderMode = 5; // Default: 5 = truly continuous hatching
 
 function setup() {
     createCanvas(1200, 1800);
     background(255); // White background
 
     // Generate k random shapes
-    let k = floor(random(15, 35)); // Random number of total shapes
+    let k = floor(random(15, 35)); // Random number of total shap5ses
     for (let i = 0; i < k; i++) {
         let x = random(100, width - 200);
         let y = random(100, height - 200);
@@ -292,40 +317,35 @@ function getShapePath(shape) {
     }
 }
 
-// Generate hatching lines data for a shape
-function generateHatchingData(shape, angle, spacing) {
-    // Get the shape's bounding box
-    const bbox = getShapeBoundingBox(shape);
-
-    // Add some padding to ensure we cover the entire shape
-    const padding = 50;
-    bbox.x -= padding;
-    bbox.y -= padding;
-    bbox.width += padding * 2;
-    bbox.height += padding * 2;
+// Generate a global set of hatching lines for the entire canvas
+function generateGlobalHatchingLines(angle, spacing) {
+    // Calculate padding to ensure we cover the entire canvas
+    const padding = 200;
+    const totalWidth = width + padding * 2;
+    const totalHeight = height + padding * 2;
 
     // Calculate the angle in radians
     const angleRad = angle * (Math.PI / 180);
 
-    // Get the diagonal length
-    const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height);
+    // Get the diagonal length of the canvas
+    const diagonalLength = Math.sqrt(totalWidth * totalWidth + totalHeight * totalHeight);
 
     // Calculate perpendicular direction
     const perpAngle = angleRad + Math.PI / 2;
     const perpX = Math.cos(perpAngle);
     const perpY = Math.sin(perpAngle);
 
-    // Center of bounding box
-    const centerX = bbox.x + bbox.width / 2;
-    const centerY = bbox.y + bbox.height / 2;
+    // Center of canvas
+    const centerX = width / 2;
+    const centerY = height / 2;
 
-    // Calculate number of lines
+    // Calculate number of lines needed
     const numLines = Math.ceil(diagonalLength / spacing) * 2;
     const startOffset = -diagonalLength;
 
     let lines = [];
 
-    // Generate all hatch lines
+    // Generate all hatch lines across the entire canvas
     for (let i = 0; i < numLines; i++) {
         const offset = startOffset + i * spacing;
 
@@ -337,7 +357,7 @@ function generateHatchingData(shape, angle, spacing) {
         const dirX = Math.cos(angleRad);
         const dirY = Math.sin(angleRad);
 
-        // Calculate line endpoints (extending beyond bbox)
+        // Calculate line endpoints (extending beyond canvas)
         const lineStartX = startX - dirX * diagonalLength;
         const lineStartY = startY - dirY * diagonalLength;
         const lineEndX = startX + dirX * diagonalLength;
@@ -355,7 +375,7 @@ function generateHatchingData(shape, angle, spacing) {
 }
 
 // Map a given color to a hatching pattern index consistently
-function getHatchingPatternByColor(colorIndex, hatchingPatterns) {
+function getHatchingPatternByColor(colorIndex) {
     // This ensures that the same color always gets the same pattern
     return hatchingPatterns[colorIndex % hatchingPatterns.length];
 }
@@ -364,67 +384,83 @@ function getHatchingPatternByColor(colorIndex, hatchingPatterns) {
 function generateLayeredSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
-  xmlns="http://www.w3.org/2000/svg"
-  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
-  
-  <!-- Background -->
-  <rect width="${width}" height="${height}" fill="white"/>
-  
-  <!-- Mode: Layered Hatching -->
-  
-  <defs>
-`;
-
-    // Define hatching patterns
-    const hatchingPatterns = [
-        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
-        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
-        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
-        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
-        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
-        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
-        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
-        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
-    ];
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Mode: Layered Hatching -->
+    
+    <defs>
+  `;
 
     // Create clip paths for each shape
     for (let i = 0; i < shapes.length; i++) {
         const shape = shapes[i];
         svgString += `    <clipPath id="shape_clip_${i}">
-      ${getShapePath(shape)}
-    </clipPath>
-`;
+        ${getShapePath(shape)}
+      </clipPath>
+  `;
     }
 
     svgString += `  </defs>
-`;
+  `;
 
     // Draw each shape with its hatching pattern
     for (let i = 0; i < shapes.length; i++) {
         const shape = shapes[i];
-        const patternIndex = i % hatchingPatterns.length;
-        const pattern = hatchingPatterns[patternIndex];
+        const pattern = getHatchingPatternByColor(shape.colorIndex);
 
         svgString += `  <g id="shape_${i}" inkscape:label="Shape ${i}" inkscape:groupmode="layer">
-    <g clip-path="url(#shape_clip_${i})">
-`;
+      <g clip-path="url(#shape_clip_${i})">
+  `;
 
         // Add each hatching direction
         for (const angle of pattern.angles) {
-            const lines = generateHatchingData(shape, angle, pattern.spacing);
+            // Generate hatching centered on this shape
+            const bbox = getShapeBoundingBox(shape);
+            const centerX = bbox.x + bbox.width / 2;
+            const centerY = bbox.y + bbox.height / 2;
 
-            for (const line of lines) {
-                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
-`;
+            // Calculate lines centered at this shape
+            const angleRad = angle * (Math.PI / 180);
+            const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height) + 100; // Add padding
+            const perpAngle = angleRad + Math.PI / 2;
+            const perpX = Math.cos(perpAngle);
+            const perpY = Math.sin(perpAngle);
+
+            const numLines = Math.ceil(diagonalLength / pattern.spacing) * 2;
+            const startOffset = -diagonalLength;
+
+            for (let j = 0; j < numLines; j++) {
+                const offset = startOffset + j * pattern.spacing;
+
+                // Calculate start point
+                const startX = centerX + perpX * offset;
+                const startY = centerY + perpY * offset;
+
+                // Calculate direction vector
+                const dirX = Math.cos(angleRad);
+                const dirY = Math.sin(angleRad);
+
+                // Calculate line endpoints
+                const lineStartX = startX - dirX * diagonalLength;
+                const lineStartY = startY - dirY * diagonalLength;
+                const lineEndX = startX + dirX * diagonalLength;
+                const lineEndY = startY + dirY * diagonalLength;
+
+                svgString += `      <line x1="${lineStartX}" y1="${lineStartY}" x2="${lineEndX}" y2="${lineEndY}" stroke="black" stroke-width="1"/>
+  `;
             }
         }
 
         svgString += `    </g>
-  </g>
-`;
+    </g>
+  `;
     }
 
     // Get segments for outlines
@@ -438,17 +474,17 @@ function generateLayeredSVG() {
 
     // Create a separate layer for outlines (on top)
     svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
-`;
+  `;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
         svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
-`;
+  `;
     }
 
     // Close the outlines layer
     svgString += `  </g>
-`;
+  `;
 
     // Close SVG
     svgString += `</svg>`;
@@ -459,29 +495,17 @@ function generateLayeredSVG() {
 function generateGridEffectSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
-  xmlns="http://www.w3.org/2000/svg"
-  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
-  
-  <!-- Background -->
-  <rect width="${width}" height="${height}" fill="white"/>
-  
-  <!-- Mode: Grid Effect Hatching -->
-`;
-
-    // Define hatching patterns
-    const hatchingPatterns = [
-        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
-        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
-        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
-        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
-        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
-        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
-        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
-        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
-    ];
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Mode: Grid Effect Hatching -->
+  `;
 
     // Sort shapes by zIndex, from bottom to top
     const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
@@ -489,31 +513,59 @@ function generateGridEffectSVG() {
     // Process each shape
     for (let i = 0; i < sortedShapes.length; i++) {
         const shape = sortedShapes[i];
-        const patternIndex = i % hatchingPatterns.length;
-        const pattern = hatchingPatterns[patternIndex];
+        const pattern = getHatchingPatternByColor(shape.colorIndex);
 
         svgString += `  <g id="shape_${i}" inkscape:label="Shape ${shape.zIndex}" inkscape:groupmode="layer">
-    <defs>
-      <clipPath id="clip_${i}">
-        ${getShapePath(shape)}
-      </clipPath>
-    </defs>
-    <g clip-path="url(#clip_${i})">
-`;
+      <defs>
+        <clipPath id="clip_${i}">
+          ${getShapePath(shape)}
+        </clipPath>
+      </defs>
+      <g clip-path="url(#clip_${i})">
+  `;
 
         // Add each hatching direction
         for (const angle of pattern.angles) {
-            const lines = generateHatchingData(shape, angle, pattern.spacing);
+            // Generate hatching centered on this shape
+            const bbox = getShapeBoundingBox(shape);
+            const centerX = bbox.x + bbox.width / 2;
+            const centerY = bbox.y + bbox.height / 2;
 
-            for (const line of lines) {
-                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
-`;
+            // Calculate lines centered at this shape
+            const angleRad = angle * (Math.PI / 180);
+            const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height) + 100; // Add padding
+            const perpAngle = angleRad + Math.PI / 2;
+            const perpX = Math.cos(perpAngle);
+            const perpY = Math.sin(perpAngle);
+
+            const numLines = Math.ceil(diagonalLength / pattern.spacing) * 2;
+            const startOffset = -diagonalLength;
+
+            for (let j = 0; j < numLines; j++) {
+                const offset = startOffset + j * pattern.spacing;
+
+                // Calculate start point
+                const startX = centerX + perpX * offset;
+                const startY = centerY + perpY * offset;
+
+                // Calculate direction vector
+                const dirX = Math.cos(angleRad);
+                const dirY = Math.sin(angleRad);
+
+                // Calculate line endpoints
+                const lineStartX = startX - dirX * diagonalLength;
+                const lineStartY = startY - dirY * diagonalLength;
+                const lineEndX = startX + dirX * diagonalLength;
+                const lineEndY = startY + dirY * diagonalLength;
+
+                svgString += `      <line x1="${lineStartX}" y1="${lineStartY}" x2="${lineEndX}" y2="${lineEndY}" stroke="black" stroke-width="1"/>
+  `;
             }
         }
 
         svgString += `    </g>
-  </g>
-`;
+    </g>
+  `;
     }
 
     // Get segments for outlines
@@ -527,17 +579,17 @@ function generateGridEffectSVG() {
 
     // Create a separate layer for outlines (on top)
     svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
-`;
+  `;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
         svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
-`;
+  `;
     }
 
     // Close the outlines layer
     svgString += `  </g>
-`;
+  `;
 
     // Close SVG
     svgString += `</svg>`;
@@ -548,36 +600,24 @@ function generateGridEffectSVG() {
 function generateExclusiveHatchingSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
-  xmlns="http://www.w3.org/2000/svg"
-  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
-  
-  <!-- Background -->
-  <rect width="${width}" height="${height}" fill="white"/>
-  
-  <!-- Mode: True Exclusive Hatching -->
-`;
-
-    // Define hatching patterns
-    const hatchingPatterns = [
-        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
-        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
-        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
-        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
-        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
-        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
-        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
-        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
-    ];
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Mode: True Exclusive Hatching -->
+  `;
 
     // Sort shapes by zIndex, from bottom to top
     const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
 
     // Create visible areas using difference operations
     svgString += `  <defs>
-`;
+  `;
 
     // For each shape, create a visible region by subtracting higher shapes
     for (let i = 0; i < sortedShapes.length; i++) {
@@ -585,7 +625,7 @@ function generateExclusiveHatchingSVG() {
 
         // Create path for this shape
         svgString += `    <clipPath id="visibleArea_${i}">
-      <path d="`;
+        <path d="`;
 
         // Start with the current shape's path
         const shapePoints = getShapePoints(shape);
@@ -594,58 +634,86 @@ function generateExclusiveHatchingSVG() {
             svgString += `L ${shapePoints[j].x} ${shapePoints[j].y} `;
         }
         svgString += `Z" />
-    </clipPath>
-    
-    <!-- Mask for overlapping areas -->
-    <mask id="overlap_mask_${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
-      <!-- White background = allow drawing -->
-      <rect x="0" y="0" width="${width}" height="${height}" fill="white" />
+      </clipPath>
       
-      <!-- Black shapes = prevent drawing -->
-`;
+      <!-- Mask for overlapping areas -->
+      <mask id="overlap_mask_${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
+        <!-- White background = allow drawing -->
+        <rect x="0" y="0" width="${width}" height="${height}" fill="white" />
+        
+        <!-- Black shapes = prevent drawing -->
+  `;
 
         // Add higher-zIndex shapes as black shapes in the mask
         for (let j = 0; j < sortedShapes.length; j++) {
             const otherShape = sortedShapes[j];
             if (otherShape.zIndex > shape.zIndex) {
                 svgString += `      <g fill="black">
-        ${getShapePath(otherShape)}
-      </g>
-`;
+          ${getShapePath(otherShape)}
+        </g>
+  `;
             }
         }
 
         svgString += `    </mask>
-`;
+  `;
     }
 
     svgString += `  </defs>
-`;
+  `;
 
     // Draw each shape with its non-overlapping hatching
     for (let i = 0; i < sortedShapes.length; i++) {
         const shape = sortedShapes[i];
-        const patternIndex = i % hatchingPatterns.length;
-        const pattern = hatchingPatterns[patternIndex];
+        const pattern = getHatchingPatternByColor(shape.colorIndex);
 
         svgString += `  <g id="shape_${i}" inkscape:label="Shape ${shape.zIndex}" inkscape:groupmode="layer">
-    <!-- Clip to this shape and mask out higher shapes -->
-    <g clip-path="url(#visibleArea_${i})" mask="url(#overlap_mask_${i})">
-`;
+      <!-- Clip to this shape and mask out higher shapes -->
+      <g clip-path="url(#visibleArea_${i})" mask="url(#overlap_mask_${i})">
+  `;
 
         // Add each hatching direction
         for (const angle of pattern.angles) {
-            const lines = generateHatchingData(shape, angle, pattern.spacing);
+            // Generate hatching centered on this shape
+            const bbox = getShapeBoundingBox(shape);
+            const centerX = bbox.x + bbox.width / 2;
+            const centerY = bbox.y + bbox.height / 2;
 
-            for (const line of lines) {
-                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
-`;
+            // Calculate lines centered at this shape
+            const angleRad = angle * (Math.PI / 180);
+            const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height) + 100; // Add padding
+            const perpAngle = angleRad + Math.PI / 2;
+            const perpX = Math.cos(perpAngle);
+            const perpY = Math.sin(perpAngle);
+
+            const numLines = Math.ceil(diagonalLength / pattern.spacing) * 2;
+            const startOffset = -diagonalLength;
+
+            for (let j = 0; j < numLines; j++) {
+                const offset = startOffset + j * pattern.spacing;
+
+                // Calculate start point
+                const startX = centerX + perpX * offset;
+                const startY = centerY + perpY * offset;
+
+                // Calculate direction vector
+                const dirX = Math.cos(angleRad);
+                const dirY = Math.sin(angleRad);
+
+                // Calculate line endpoints
+                const lineStartX = startX - dirX * diagonalLength;
+                const lineStartY = startY - dirY * diagonalLength;
+                const lineEndX = startX + dirX * diagonalLength;
+                const lineEndY = startY + dirY * diagonalLength;
+
+                svgString += `      <line x1="${lineStartX}" y1="${lineStartY}" x2="${lineEndX}" y2="${lineEndY}" stroke="black" stroke-width="1"/>
+  `;
             }
         }
 
         svgString += `    </g>
-  </g>
-`;
+    </g>
+  `;
     }
 
     // Get segments for outlines
@@ -659,17 +727,17 @@ function generateExclusiveHatchingSVG() {
 
     // Create a separate layer for outlines (on top)
     svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
-`;
+  `;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
         svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
-`;
+  `;
     }
 
     // Close the outlines layer
     svgString += `  </g>
-`;
+  `;
 
     // Close SVG
     svgString += `</svg>`;
@@ -680,36 +748,24 @@ function generateExclusiveHatchingSVG() {
 function generateColorConsistentSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
-  xmlns="http://www.w3.org/2000/svg"
-  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
-  
-  <!-- Background -->
-  <rect width="${width}" height="${height}" fill="white"/>
-  
-  <!-- Mode: Color-consistent Exclusive Hatching -->
-`;
-
-    // Define hatching patterns
-    const hatchingPatterns = [
-        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
-        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
-        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
-        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
-        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
-        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
-        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
-        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
-    ];
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Mode: Color-consistent Exclusive Hatching -->
+  `;
 
     // Sort shapes by zIndex, from bottom to top
     const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
 
     // Create visible areas using difference operations
     svgString += `  <defs>
-`;
+  `;
 
     // For each shape, create a visible region by subtracting higher shapes
     for (let i = 0; i < sortedShapes.length; i++) {
@@ -717,7 +773,7 @@ function generateColorConsistentSVG() {
 
         // Create path for this shape
         svgString += `    <clipPath id="visibleArea_${i}">
-      <path d="`;
+        <path d="`;
 
         // Start with the current shape's path
         const shapePoints = getShapePoints(shape);
@@ -726,58 +782,87 @@ function generateColorConsistentSVG() {
             svgString += `L ${shapePoints[j].x} ${shapePoints[j].y} `;
         }
         svgString += `Z" />
-    </clipPath>
-    
-    <!-- Mask for overlapping areas -->
-    <mask id="overlap_mask_${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
-      <!-- White background = allow drawing -->
-      <rect x="0" y="0" width="${width}" height="${height}" fill="white" />
+      </clipPath>
       
-      <!-- Black shapes = prevent drawing -->
-`;
+      <!-- Mask for overlapping areas -->
+      <mask id="overlap_mask_${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
+        <!-- White background = allow drawing -->
+        <rect x="0" y="0" width="${width}" height="${height}" fill="white" />
+        
+        <!-- Black shapes = prevent drawing -->
+  `;
 
         // Add higher-zIndex shapes as black shapes in the mask
         for (let j = 0; j < sortedShapes.length; j++) {
             const otherShape = sortedShapes[j];
             if (otherShape.zIndex > shape.zIndex) {
                 svgString += `      <g fill="black">
-        ${getShapePath(otherShape)}
-      </g>
-`;
+          ${getShapePath(otherShape)}
+        </g>
+  `;
             }
         }
 
         svgString += `    </mask>
-`;
+  `;
     }
 
     svgString += `  </defs>
-`;
+  `;
 
     // Draw each shape with its non-overlapping hatching
     for (let i = 0; i < sortedShapes.length; i++) {
         const shape = sortedShapes[i];
         // Get pattern based on colorIndex, not shape index
-        const pattern = getHatchingPatternByColor(shape.colorIndex, hatchingPatterns);
+        const pattern = getHatchingPatternByColor(shape.colorIndex);
 
         svgString += `  <g id="shape_${i}" inkscape:label="Shape ${shape.zIndex} (Color ${shape.colorIndex})" inkscape:groupmode="layer">
-    <!-- Clip to this shape and mask out higher shapes -->
-    <g clip-path="url(#visibleArea_${i})" mask="url(#overlap_mask_${i})">
-`;
+      <!-- Clip to this shape and mask out higher shapes -->
+      <g clip-path="url(#visibleArea_${i})" mask="url(#overlap_mask_${i})">
+  `;
 
         // Add each hatching direction
         for (const angle of pattern.angles) {
-            const lines = generateHatchingData(shape, angle, pattern.spacing);
+            // Generate hatching centered on this shape
+            const bbox = getShapeBoundingBox(shape);
+            const centerX = bbox.x + bbox.width / 2;
+            const centerY = bbox.y + bbox.height / 2;
 
-            for (const line of lines) {
-                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
-`;
+            // Calculate lines centered at this shape
+            const angleRad = angle * (Math.PI / 180);
+            const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height) + 100; // Add padding
+            const perpAngle = angleRad + Math.PI / 2;
+            const perpX = Math.cos(perpAngle);
+            const perpY = Math.sin(perpAngle);
+
+            const numLines = Math.ceil(diagonalLength / pattern.spacing) * 2;
+            const startOffset = -diagonalLength;
+
+            for (let j = 0; j < numLines; j++) {
+                const offset = startOffset + j * pattern.spacing;
+
+                // Calculate start point
+                const startX = centerX + perpX * offset;
+                const startY = centerY + perpY * offset;
+
+                // Calculate direction vector
+                const dirX = Math.cos(angleRad);
+                const dirY = Math.sin(angleRad);
+
+                // Calculate line endpoints
+                const lineStartX = startX - dirX * diagonalLength;
+                const lineStartY = startY - dirY * diagonalLength;
+                const lineEndX = startX + dirX * diagonalLength;
+                const lineEndY = startY + dirY * diagonalLength;
+
+                svgString += `      <line x1="${lineStartX}" y1="${lineStartY}" x2="${lineEndX}" y2="${lineEndY}" stroke="black" stroke-width="1"/>
+  `;
             }
         }
 
         svgString += `    </g>
-  </g>
-`;
+    </g>
+  `;
     }
 
     // Get segments for outlines
@@ -791,17 +876,146 @@ function generateColorConsistentSVG() {
 
     // Create a separate layer for outlines (on top)
     svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
-`;
+  `;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
         svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
-`;
+  `;
     }
 
     // Close the outlines layer
     svgString += `  </g>
-`;
+  `;
+
+    // Close SVG
+    svgString += `</svg>`;
+    return svgString;
+}
+
+// Generate SVG with truly continuous hatching (Mode 5)
+function generateContinuousHatchingSVG() {
+    // Start SVG with proper header
+    let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Mode: True Continuous Hatching -->
+  `;
+
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // Create masks and clip paths for each shape
+    svgString += `  <defs>
+  `;
+
+    // Sort shapes by zIndex, from bottom to top
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // For each shape, create a clip path and mask for its visible area
+    for (let i = 0; i < sortedShapes.length; i++) {
+        const shape = sortedShapes[i];
+
+        // Create clip path for this shape
+        svgString += `    <clipPath id="shape_clip_${i}">
+        ${getShapePath(shape)}
+      </clipPath>
+      
+      <!-- Mask to hide overlapped areas -->
+      <mask id="overlap_mask_${i}">
+        <rect width="${width}" height="${height}" fill="white"/>
+  `;
+
+        // Add higher shapes as black areas to mask them out
+        for (let j = 0; j < sortedShapes.length; j++) {
+            const otherShape = sortedShapes[j];
+            if (otherShape.zIndex > shape.zIndex) {
+                svgString += `      <g fill="black">
+          ${getShapePath(otherShape)}
+        </g>
+  `;
+            }
+        }
+
+        svgString += `    </mask>
+  `;
+    }
+
+    svgString += `  </defs>
+  `;
+
+    // For each color, create a group with the global hatching pattern
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color, sorted by zIndex
+        const shapesWithColor = sortedShapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Get the pattern for this color
+        const pattern = getHatchingPatternByColor(colorIndex);
+
+        svgString += `  <!-- Color group ${colorIndex} -->
+    <g inkscape:label="Color ${colorIndex}" inkscape:groupmode="layer">
+  `;
+
+        // For each angle in the pattern, create global hatch lines
+        for (const angle of pattern.angles) {
+            // Generate global hatching lines
+            const globalLines = generateGlobalHatchingLines(angle, pattern.spacing);
+
+            // For each shape with this color
+            for (let i = 0; i < shapesWithColor.length; i++) {
+                const shape = shapesWithColor[i];
+                const shapeIndex = sortedShapes.findIndex(s => s === shape);
+
+                svgString += `    <!-- Shape ${shape.zIndex} -->
+      <g clip-path="url(#shape_clip_${shapeIndex})" mask="url(#overlap_mask_${shapeIndex})">
+  `;
+
+                // Add all global lines
+                for (const line of globalLines) {
+                    svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
+  `;
+                }
+
+                svgString += `    </g>
+  `;
+            }
+        }
+
+        svgString += `  </g>
+  `;
+    }
+
+    // Get segments for outlines
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+
+    // Create a separate layer for outlines (on top)
+    svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
+  `;
+
+    // Add SVG for each outline segment
+    for (let seg of outerSegments) {
+        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
+  `;
+    }
+
+    // Close the outlines layer
+    svgString += `  </g>
+  `;
 
     // Close SVG
     svgString += `</svg>`;
@@ -826,6 +1040,10 @@ function keyPressed() {
         // Switch to Mode 4: Color-consistent Exclusive Hatching
         renderMode = 4;
         console.log("Switched to Mode 4: Color-consistent Exclusive Hatching");
+    } else if (key === '5') {
+        // Switch to Mode 5: True Continuous Hatching
+        renderMode = 5;
+        console.log("Switched to Mode 5: True Continuous Hatching");
     } else if (key === 's') {
         // Generate SVG string with the current mode
         let svgContent;
@@ -837,6 +1055,8 @@ function keyPressed() {
             svgContent = generateExclusiveHatchingSVG();
         } else if (renderMode === 4) {
             svgContent = generateColorConsistentSVG();
+        } else if (renderMode === 5) {
+            svgContent = generateContinuousHatchingSVG();
         }
 
         // Create a Blob with the SVG content
