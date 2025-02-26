@@ -10,7 +10,7 @@ function setup() {
     }
     background(255);
     let W = 5; // Number of columns in grid
-    let H = 10; // Number of rows in grid
+    let H = 15; // Number of rows in grid
     pos = []; // Clear existing random positions
 
     // Create diagonal grid-based positions
@@ -18,27 +18,19 @@ function setup() {
         for (let j = 0; j < H; j++) {
             let x = (width / (W - 1)) * i;
             let y = (height / (H - 1)) * j;
+            // Draw point at grid position
+            stroke(0);
+            strokeWeight(1);
 
             // Offset x position for every other row to create diagonal pattern
             if (j % 2 === 1) {
                 x += (width / (W - 1)) / 2;
             }
+            // draw cirlce gird
+            // circle(x, y, 5);
 
             if (random() < 0.5) { // 50% chance
                 pos.push(createVector(x, y));
-            }
-        }
-    }
-
-    // Connect points within distance threshold
-    for (let i = 0; i < pos.length; i++) {
-        let p1 = pos[i];
-        for (let j = pos.length - 1; j >= 0; j--) {
-            let p2 = pos[j];
-            let dis = dist(p1.x, p1.y, p2.x, p2.y);
-            if (dis > 200 && dis < 450 && i < j) {
-                strokeWeight(1);
-                // connect(p1.x, p1.y, p2.x, p2.y);
             }
         }
     }
@@ -54,15 +46,15 @@ function setup() {
         blendMode(DIFFERENCE);
 
         // Randomly choose between circle, triangle and square
-        let shape = random(['circle', 'triangle', 'square']);
-        if (shape === 'circle') {
-            circle(p.x, p.y, 5);
-        } else if (shape === 'triangle') {
-            triangle(p.x - 3, p.y + 3, p.x + 3, p.y + 3, p.x, p.y - 3);
-        } else {
-            rectMode(CENTER);
-            square(p.x, p.y, 5);
-        }
+        // let shape = random(['circle', 'triangle', 'square']);
+        // if (shape === 'circle') {
+        //     circle(p.x, p.y, 5);
+        // } else if (shape === 'triangle') {
+        //     triangle(p.x - 3, p.y + 3, p.x + 3, p.y + 3, p.x, p.y - 3);
+        // } else {
+        //     rectMode(CENTER);
+        //     square(p.x, p.y, 5);
+        // }
 
         col.setAlpha(255); // Fix alpha value to valid range 0-255
         // noFill();

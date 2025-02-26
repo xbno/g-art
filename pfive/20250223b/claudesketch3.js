@@ -1,7 +1,10 @@
 let shapes = [];
+let canvas;
+let svg = false; // Flag to determine rendering mode
 
 function setup() {
-    createCanvas(1200, 1800);
+    // Create regular canvas by default
+    canvas = createCanvas(1200, 1800);
     background(255); // White background
 
     // Generate k random shapes
@@ -67,15 +70,17 @@ function setup() {
 
 function draw() {
     // Set blend mode to DIFFERENCE for fills
-    // blendMode(DIFFERENCE);
+    // blendMode(DIFFERENCE); // Not all blend modes are supported in SVG
+
     // Step 1: Draw fills without stroke
     noStroke();
     let colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"]; // Pleasant color palette
     for (let shape of shapes) {
-        fill(color(random(colors)));
+        fill(random(colors));
         drawShapeFill(shape);
     }
-    // Reset blend mode to BLEND for outlines
+
+    // Reset blend mode
     blendMode(BLEND);
 
     // Step 2: Get all outline segments
@@ -109,131 +114,12 @@ function draw() {
 // Draw the fill of a shape
 function drawShapeFill(shape) {
     beginShape();
-    // fill(50);
     let points = getShapePoints(shape);
     for (let p of points) {
         vertex(p.x, p.y);
     }
     endShape(CLOSE);
 }
-
-// function drawShapeFill(shape, type = 'dots') {
-//     beginShape();
-//     fill(50);
-//     let points = getShapePoints(shape);
-//     for (let p of points) {
-//         vertex(p.x, p.y);
-//     }
-//     endShape(CLOSE);
-
-//     let minX = Infinity, minY = Infinity;
-//     let maxX = -Infinity, maxY = -Infinity;
-//     for (let p of points) {
-//         minX = min(minX, p.x);
-//         minY = min(minY, p.y);
-//         maxX = max(maxX, p.x);
-//         maxY = max(maxY, p.y);
-//     }
-
-//     push();
-//     fill(shape.color);
-//     noStroke();
-//     let spacing = 5;
-//     for (let x = minX; x < maxX; x += spacing) {
-//         for (let y = minY; y < maxY; y += spacing) {
-//             if (pointInShape(x, y, shape)) {
-//                 circle(x, y, 3);
-//             }
-//         }
-//     }
-//     pop();
-// }
-
-// function drawShapeFill(shape) {
-//     // First create a clipping mask with the shape
-//     beginShape();
-//     fill(50)
-//     let points = getShapePoints(shape);
-//     for (let p of points) {
-//         vertex(p.x, p.y);
-//     }
-//     endShape(CLOSE);
-
-//     // Get bounding box of the shape
-//     let minX = Infinity, minY = Infinity;
-//     let maxX = -Infinity, maxY = -Infinity;
-//     for (let p of points) {
-//         minX = min(minX, p.x);
-//         minY = min(minY, p.y);
-//         maxX = max(maxX, p.x);
-//         maxY = max(maxY, p.y);
-//     }
-
-//     // Draw hatching lines at 45 degrees
-//     push(); // Save current drawing state
-//     stroke(shape.color);
-//     strokeWeight(2);
-//     let spacing = 10; // Space between hatch lines
-//     let diagonal = spacing * sqrt(2); // Adjust spacing for 45 degree lines
-
-//     // Calculate how many lines we need to cover the shape diagonally
-//     let width = maxX - minX;
-//     let height = maxY - minY;
-//     let numLines = ceil((width + height) / diagonal) + 4; // Add padding
-
-//     // Start offset to ensure we cover the whole shape
-//     let startOffset = -diagonal * numLines / 2;
-
-//     for (let i = 0; i < numLines; i++) {
-//         let offset = startOffset + i * diagonal;
-
-//         // Calculate start and end points for a 45-degree line
-//         let startX = minX + offset;
-//         let startY = minY;
-//         let endX = startX + height;
-//         let endY = maxY;
-
-//         // Binary search from top
-//         let topFound = false;
-//         let top = 0, bottom = 1;
-//         for (let j = 0; j < 10; j++) { // 10 iterations for precision
-//             let mid = (top + bottom) / 2;
-//             let testX = startX + (endX - startX) * mid;
-//             let testY = startY + (endY - startY) * mid;
-//             if (pointInShape(testX, testY, shape)) {
-//                 bottom = mid;
-//                 topFound = true;
-//             } else {
-//                 top = mid;
-//             }
-//         }
-
-//         // Binary search from bottom
-//         let bottomFound = false;
-//         top = 0; bottom = 1;
-//         for (let j = 0; j < 10; j++) {
-//             let mid = (top + bottom) / 2;
-//             let testX = endX - (endX - startX) * mid;
-//             let testY = endY - (endY - startY) * mid;
-//             if (pointInShape(testX, testY, shape)) {
-//                 bottom = mid;
-//                 bottomFound = true;
-//             } else {
-//                 top = mid;
-//             }
-//         }
-
-//         if (topFound && bottomFound) {
-//             let lineStartX = startX + (endX - startX) * bottom;
-//             let lineStartY = startY + (endY - startY) * bottom;
-//             let lineEndX = endX - (endX - startX) * bottom;
-//             let lineEndY = endY - (endY - startY) * bottom;
-//             line(lineStartX, lineStartY, lineEndX, lineEndY);
-//         }
-//     }
-//     pop(); // Restore drawing state
-// }
-
 
 // Get the points defining a shape's outline
 function getShapePoints(shape) {
@@ -364,9 +250,78 @@ function filterOuterSegments(segments) {
     });
 }
 
+// Generate SVG string directly
+function generateSVG() {
+    // Start SVG with proper header
+    let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${width}" height="${height}" fill="white"/>
+  `;
+
+    // Add SVG for each shape fill
+    const colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"];
+    for (let shape of shapes) {
+        const colorIndex = Math.floor(Math.random() * colors.length);
+        const fillColor = colors[colorIndex];
+
+        if (shape.type === 'circle') {
+            svgString += `  <circle cx="${shape.x}" cy="${shape.y}" r="${shape.size / 2}" fill="${fillColor}" stroke="none" />\n`;
+        }
+        else if (shape.type === 'square') {
+            const x = shape.x - shape.size / 2;
+            const y = shape.y - shape.size / 2;
+            svgString += `  <rect x="${x}" y="${y}" width="${shape.size}" height="${shape.size}" fill="${fillColor}" stroke="none" />\n`;
+        }
+        else if (shape.type === 'triangle') {
+            const points = getShapePoints(shape);
+            const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
+            svgString += `  <polygon points="${pointsStr}" fill="${fillColor}" stroke="none" />\n`;
+        }
+    }
+
+    // Get segments for outlines
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+
+    // Add SVG for each outline segment
+    for (let seg of outerSegments) {
+        svgString += `  <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10" />\n`;
+    }
+
+    // Close SVG
+    svgString += '</svg>';
+    return svgString;
+}
+
+// Handle saving SVG
 function keyPressed() {
     if (key === 's') {
-        // Save the SVG
-        save("my_blobs_" + Date.now() + ".svg");
+        // Generate SVG string
+        const svgContent = generateSVG();
+
+        // Create a Blob with the SVG content
+        const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+
+        // Create a download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = "my_blobs_" + Date.now() + ".svg";
+
+        // Append to body, click and remove
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up
+        URL.revokeObjectURL(url);
+
+        console.log("SVG saved!");
     }
 }
