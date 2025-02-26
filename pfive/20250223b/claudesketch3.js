@@ -31,7 +31,7 @@ function setup() {
     background(255); // White background
 
     // Generate k random shapes
-    let k = floor(random(10, 15)); // Random number of total shapes
+    let k = floor(random(10, 35)); // Random number of total shapes
     for (let i = 0; i < k; i++) {
         let x = random(100, width - 200);
         let y = random(100, height - 200);
@@ -296,121 +296,21 @@ function getShapeBoundingBox(shape) {
     };
 }
 
-// Calculate the clipped hatching line segments for a shape
-function calculateClippedHatchingLines(shape, angle, spacing, excludeShapes = []) {
-    // Get boundary segments for this shape
-    const boundarySegments = getOutlineSegments(shape);
+// Calculate truly clipped hatching lines for a shape
+function calculateTrulyClippedHatchingLines(shapes, colorIndex, angle, spacing) {
+    // Get all shapes with this color
+    const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
 
-    // Calculate the angle in radians
-    const angleRad = angle * (Math.PI / 180);
-
-    // Get the diagonal length of the shape's bounding box
-    const bbox = getShapeBoundingBox(shape);
-    const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height) + 40; // Add padding
-
-    // Calculate perpendicular direction to the hatching lines
-    const perpAngle = angleRad + Math.PI / 2;
-    const perpX = Math.cos(perpAngle);
-    const perpY = Math.sin(perpAngle);
-
-    // Calculate center of the shape's bounding box
-    const centerX = bbox.x + bbox.width / 2;
-    const centerY = bbox.y + bbox.height / 2;
-
-    // Calculate number of hatching lines needed
-    const numLines = Math.ceil(diagonalLength / spacing) * 2;
-    const startOffset = -diagonalLength;
-
-    // Store all line segments that are inside the shape
-    let clippedLines = [];
-
-    // Create hatching lines
-    for (let i = 0; i < numLines; i++) {
-        const offset = startOffset + i * spacing;
-
-        // Calculate start point perpendicular to the hatching direction
-        const startX = centerX + perpX * offset;
-        const startY = centerY + perpY * offset;
-
-        // Calculate direction vector of the hatching line
-        const dirX = Math.cos(angleRad);
-        const dirY = Math.sin(angleRad);
-
-        // Create a very long line that passes through the shape
-        const hatchLine = {
-            start: {
-                x: startX - dirX * diagonalLength,
-                y: startY - dirY * diagonalLength
-            },
-            end: {
-                x: startX + dirX * diagonalLength,
-                y: startY + dirY * diagonalLength
-            }
-        };
-
-        // Find all intersection points with the shape's boundary
-        let intersections = [];
-        for (const segment of boundarySegments) {
-            const intersection = findIntersection(hatchLine, segment);
-            if (intersection) {
-                intersections.push(intersection);
-            }
-        }
-
-        // We need an even number of intersections to form complete segments
-        // (enter and exit the shape)
-        if (intersections.length >= 2) {
-            // Sort intersections by distance from the start of the hatch line
-            intersections.sort((a, b) => {
-                const distA = Math.pow(a.x - hatchLine.start.x, 2) + Math.pow(a.y - hatchLine.start.y, 2);
-                const distB = Math.pow(b.x - hatchLine.start.x, 2) + Math.pow(b.y - hatchLine.start.y, 2);
-                return distA - distB;
-            });
-
-            // Group intersections into pairs to form line segments
-            for (let j = 0; j < intersections.length - 1; j += 2) {
-                const start = intersections[j];
-                const end = intersections[j + 1];
-
-                if (!start || !end) continue;
-
-                // Check if the midpoint of this segment is inside the shape
-                const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2;
-
-                if (pointInShape(midX, midY, shape)) {
-                    // Check if this point is inside any of the excluded shapes
-                    let excluded = false;
-                    for (const excludeShape of excludeShapes) {
-                        if (pointInShape(midX, midY, excludeShape)) {
-                            excluded = true;
-                            break;
-                        }
-                    }
-
-                    if (!excluded) {
-                        clippedLines.push({
-                            x1: start.x,
-                            y1: start.y,
-                            x2: end.x,
-                            y2: end.y
-                        });
-                    }
-                }
-            }
-        }
+    // If no shapes, return empty array
+    if (shapesWithColor.length === 0) {
+        return [];
     }
 
-    return clippedLines;
-}
-
-// Calculate hatching lines that flow continuously across multiple shapes of the same color
-function calculateGlobalClippedHatchingLines(shapes, colorIndex, angle, spacing) {
-    // Get the bounding box for all shapes of this color
+    // Calculate a global bounding box that encompasses all shapes of this color
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
 
-    for (const shape of shapes) {
+    for (const shape of shapesWithColor) {
         const bbox = getShapeBoundingBox(shape);
         minX = Math.min(minX, bbox.x);
         minY = Math.min(minY, bbox.y);
@@ -418,25 +318,14 @@ function calculateGlobalClippedHatchingLines(shapes, colorIndex, angle, spacing)
         maxY = Math.max(maxY, bbox.y + bbox.height);
     }
 
-    const colorBBox = {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY
-    };
-
     // Add padding to ensure coverage
     const padding = 100;
-    colorBBox.x -= padding;
-    colorBBox.y -= padding;
-    colorBBox.width += padding * 2;
-    colorBBox.height += padding * 2;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
 
-    // Calculate center of all shapes with this color
-    const centerX = colorBBox.x + colorBBox.width / 2;
-    const centerY = colorBBox.y + colorBBox.height / 2;
-
-    // Calculate the angle in radians
+    // Calculate angle in radians
     const angleRad = angle * (Math.PI / 180);
 
     // Calculate perpendicular direction
@@ -444,55 +333,52 @@ function calculateGlobalClippedHatchingLines(shapes, colorIndex, angle, spacing)
     const perpX = Math.cos(perpAngle);
     const perpY = Math.sin(perpAngle);
 
-    // Get the diagonal length
-    const diagonalLength = Math.sqrt(colorBBox.width * colorBBox.width + colorBBox.height * colorBBox.height);
+    // Calculate diagonal length for full coverage
+    const diagonalLength = Math.sqrt(
+        Math.pow(maxX - minX, 2) + Math.pow(maxY - minY, 2)
+    );
 
-    // Calculate number of lines
+    // Calculate center point
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Calculate number of lines needed
     const numLines = Math.ceil(diagonalLength / spacing) * 2;
-    const startOffset = -diagonalLength;
+    const startOffset = -diagonalLength / 2;
 
-    // Store all line segments
-    let allClippedSegments = [];
+    // Result - will store all line segments
+    let allLineSegments = [];
 
-    // For each shape, calculate the clipped segments
-    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+    // For each hatching line
+    for (let i = 0; i < numLines; i++) {
+        const offset = startOffset + i * spacing;
 
-    for (let i = 0; i < sortedShapes.length; i++) {
-        const shape = sortedShapes[i];
-        const excludeShapes = sortedShapes.filter(s => s.zIndex > shape.zIndex);
+        // Calculate line start point perpendicular to hatching direction
+        const offsetX = perpX * offset;
+        const offsetY = perpY * offset;
 
-        // Get line segments for this shape
-        const shapeSegments = [];
+        // Calculate line direction vector
+        const dirX = Math.cos(angleRad);
+        const dirY = Math.sin(angleRad);
 
-        // Generate the global grid of lines
-        for (let j = 0; j < numLines; j++) {
-            const offset = startOffset + j * spacing;
+        // Create a very long line that passes through the entire area
+        const hatchLine = {
+            start: {
+                x: centerX + offsetX - dirX * diagonalLength,
+                y: centerY + offsetY - dirY * diagonalLength
+            },
+            end: {
+                x: centerX + offsetX + dirX * diagonalLength,
+                y: centerY + offsetY + dirY * diagonalLength
+            }
+        };
 
-            // Calculate start point of the line
-            const startX = centerX + perpX * offset;
-            const startY = centerY + perpY * offset;
-
-            // Calculate direction vector
-            const dirX = Math.cos(angleRad);
-            const dirY = Math.sin(angleRad);
-
-            // Calculate very long line segment that crosses the entire area
-            const hatchLine = {
-                start: {
-                    x: startX - dirX * diagonalLength,
-                    y: startY - dirY * diagonalLength
-                },
-                end: {
-                    x: startX + dirX * diagonalLength,
-                    y: startY + dirY * diagonalLength
-                }
-            };
-
-            // Get outline segments for this shape
+        // For each shape, find intersection points
+        for (const shape of shapesWithColor) {
             const outlineSegments = getOutlineSegments(shape);
+            let intersections = [];
 
             // Find all intersections with shape boundary
-            let intersections = [];
             for (const segment of outlineSegments) {
                 const intersection = findIntersection(hatchLine, segment);
                 if (intersection) {
@@ -500,107 +386,94 @@ function calculateGlobalClippedHatchingLines(shapes, colorIndex, angle, spacing)
                 }
             }
 
-            // If we have at least 2 intersections, we can create line segments
+            // Need at least 2 intersections (enter and exit shape)
             if (intersections.length >= 2) {
-                // Sort intersections by distance from line start
+                // Sort intersections by distance from hatch line start
                 intersections.sort((a, b) => {
                     const distA = Math.pow(a.x - hatchLine.start.x, 2) + Math.pow(a.y - hatchLine.start.y, 2);
                     const distB = Math.pow(b.x - hatchLine.start.x, 2) + Math.pow(b.y - hatchLine.start.y, 2);
                     return distA - distB;
                 });
 
-                // Group intersections into pairs
-                for (let k = 0; k < intersections.length - 1; k += 2) {
-                    const pt1 = intersections[k];
-                    const pt2 = intersections[k + 1];
+                // Process intersections in pairs (enter/exit)
+                for (let j = 0; j < intersections.length - 1; j += 2) {
+                    const p1 = intersections[j];
+                    const p2 = intersections[j + 1];
 
-                    // Skip if we don't have a complete pair
-                    if (!pt1 || !pt2) continue;
+                    // Check if we have a valid pair
+                    if (!p1 || !p2) continue;
 
                     // Calculate midpoint to check if it's inside the shape
-                    const midX = (pt1.x + pt2.x) / 2;
-                    const midY = (pt1.y + pt2.y) / 2;
+                    const midX = (p1.x + p2.x) / 2;
+                    const midY = (p1.y + p2.y) / 2;
 
                     if (pointInShape(midX, midY, shape)) {
-                        // Check if this segment is inside any higher z-index shape
-                        let excluded = false;
-                        for (const excludeShape of excludeShapes) {
-                            if (pointInShape(midX, midY, excludeShape)) {
-                                excluded = true;
+                        // We need to check if this segment is obscured by a higher z-index shape
+                        let isObscured = false;
+                        for (const otherShape of shapes) {
+                            if (otherShape.zIndex > shape.zIndex && pointInShape(midX, midY, otherShape)) {
+                                isObscured = true;
                                 break;
                             }
                         }
 
-                        if (!excluded) {
-                            shapeSegments.push({
-                                x1: pt1.x,
-                                y1: pt1.y,
-                                x2: pt2.x,
-                                y2: pt2.y
+                        if (!isObscured) {
+                            // Add this line segment to our result
+                            allLineSegments.push({
+                                x1: p1.x,
+                                y1: p1.y,
+                                x2: p2.x,
+                                y2: p2.y
                             });
                         }
                     }
                 }
             }
         }
-
-        // Add all shape segments to the result
-        allClippedSegments.push(...shapeSegments);
     }
 
-    return allClippedSegments;
+    return allLineSegments;
 }
 
-// Generate SVG with truly continuous hatching (Mode 5) using clipped lines
+// Generate SVG with truly clipped lines that will work with plotter software
 function generatePlotterOptimizedSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
-    xmlns="http://www.w3.org/2000/svg"
-    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
-    
-    <!-- Background -->
-    <rect width="${width}" height="${height}" fill="white"/>
-    
-    <!-- Mode: Plotter-Optimized Hatching -->
-  `;
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+  xmlns="http://www.w3.org/2000/svg">
+  
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="white"/>
+  
+  <!-- Hatching lines by color -->
+`;
 
     // Get unique color indices
     const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
 
-    // Sort shapes by zIndex, from bottom to top
-    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
-
     // For each color, create a group with the hatching lines
     for (const colorIndex of colorIndices) {
-        // Get all shapes with this color
-        const shapesWithColor = sortedShapes.filter(shape => shape.colorIndex === colorIndex);
-
-        if (shapesWithColor.length === 0) continue;
-
         // Get the pattern for this color
-        const pattern = getHatchingPatternByColor(colorIndex);
+        const pattern = hatchingPatterns[colorIndex % hatchingPatterns.length];
 
         svgString += `  <!-- Color group ${colorIndex} -->
-    <g inkscape:label="Color ${colorIndex}" inkscape:groupmode="layer">
-  `;
+  <g id="color-${colorIndex}">
+`;
 
         // For each angle in the pattern, create hatching lines
         for (const angle of pattern.angles) {
-            // Calculate all clipped line segments for this color and angle
-            const lineSegments = calculateGlobalClippedHatchingLines(shapesWithColor, colorIndex, angle, pattern.spacing);
+            // Calculate all truly clipped line segments for this color and angle
+            const lineSegments = calculateTrulyClippedHatchingLines(shapes, colorIndex, angle, pattern.spacing);
 
-            // Add each line segment
+            // Add each line segment to the SVG
             for (const segment of lineSegments) {
                 svgString += `    <line x1="${segment.x1}" y1="${segment.y1}" x2="${segment.x2}" y2="${segment.y2}" stroke="black" stroke-width="1"/>
-  `;
+`;
             }
         }
 
         svgString += `  </g>
-  `;
+`;
     }
 
     // Get segments for outlines
@@ -613,18 +486,19 @@ function generatePlotterOptimizedSVG() {
     let outerSegments = filterOuterSegments(splitSegments);
 
     // Create a separate layer for outlines (on top)
-    svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
-  `;
+    svgString += `  <!-- Outlines -->
+  <g id="outlines">
+`;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
         svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
-  `;
+`;
     }
 
     // Close the outlines layer
     svgString += `  </g>
-  `;
+`;
 
     // Close SVG
     svgString += `</svg>`;
