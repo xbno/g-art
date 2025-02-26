@@ -1,5 +1,5 @@
 let shapes = [];
-let renderMode = 1; // Default: 1 = layered hatching, 2 = exclusive hatching
+let renderMode = 1; // Default: 1 = layered hatching, 2 = grid effect, 3 = true exclusive hatching
 
 function setup() {
     createCanvas(1200, 1800);
@@ -354,6 +354,73 @@ function generateHatchingData(shape, angle, spacing) {
     return lines;
 }
 
+// Check if a point is visible for a shape (not covered by higher shapes)
+function isPointVisible(px, py, shape, sortedShapes) {
+    // First check if the point is within this shape
+    if (!pointInShape(px, py, shape)) return false;
+
+    // Then check if it's covered by any higher shape
+    for (const otherShape of sortedShapes) {
+        if (otherShape.zIndex > shape.zIndex && pointInShape(px, py, otherShape)) {
+            return false; // Point is covered by a higher shape
+        }
+    }
+
+    return true; // Point is visible
+}
+
+// Function to clip a line against a shape's visible area
+function clipLineToVisibleArea(line, shape, sortedShapes) {
+    // Sample points along the line
+    const numSamples = 100; // Increase for better accuracy
+    const dx = (line.x2 - line.x1) / numSamples;
+    const dy = (line.y2 - line.y1) / numSamples;
+
+    let visibleSegments = [];
+    let currentSegment = null;
+
+    // Check each point along the line
+    for (let i = 0; i <= numSamples; i++) {
+        const x = line.x1 + dx * i;
+        const y = line.y1 + dy * i;
+
+        const isVisible = isPointVisible(x, y, shape, sortedShapes);
+
+        if (isVisible) {
+            // Start a new segment if we're not already in one
+            if (!currentSegment) {
+                currentSegment = { start: { x, y }, points: [] };
+            }
+
+            // Add this point to the current segment
+            currentSegment.points.push({ x, y });
+        } else if (currentSegment) {
+            // End the current segment
+            currentSegment.end = currentSegment.points[currentSegment.points.length - 1];
+            visibleSegments.push({
+                x1: currentSegment.start.x,
+                y1: currentSegment.start.y,
+                x2: currentSegment.end.x,
+                y2: currentSegment.end.y
+            });
+            currentSegment = null;
+        }
+    }
+
+    // Don't forget to add the last segment if needed
+    if (currentSegment && currentSegment.points.length > 0) {
+        currentSegment.end = currentSegment.points[currentSegment.points.length - 1];
+        visibleSegments.push({
+            x1: currentSegment.start.x,
+            y1: currentSegment.start.y,
+            x2: currentSegment.end.x,
+            y2: currentSegment.end.y
+        });
+    }
+
+    return visibleSegments;
+}
+
 // Generate SVG string with layered hatching (Mode 1)
 function generateLayeredSVG() {
     // Start SVG with proper header
@@ -449,8 +516,8 @@ function generateLayeredSVG() {
     return svgString;
 }
 
-// Generate SVG string with exclusive hatching (Mode 2)
-function generateExclusiveSVG() {
+// Generate SVG string with grid effect (Mode 2)
+function generateGridEffectSVG() {
     // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -462,7 +529,7 @@ function generateExclusiveSVG() {
   <!-- Background -->
   <rect width="${width}" height="${height}" fill="white"/>
   
-  <!-- Mode: Exclusive Hatching -->
+  <!-- Mode: Grid Effect Hatching -->
 `;
 
     // Define hatching patterns
@@ -480,53 +547,19 @@ function generateExclusiveSVG() {
     // Sort shapes by zIndex, from bottom to top
     const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
 
-    // Process each visible region
-    // We'll create a composite path for each region of overlapping shapes
-    // For each shape, we need to subtract all higher shapes from it
+    // Process each shape
     for (let i = 0; i < sortedShapes.length; i++) {
         const shape = sortedShapes[i];
         const patternIndex = i % hatchingPatterns.length;
         const pattern = hatchingPatterns[patternIndex];
 
-        // Get all higher shapes (shapes that would be on top of this one)
-        const higherShapes = sortedShapes.filter(s => s.zIndex > shape.zIndex);
-
-        // Create a shape definition that excludes all higher shapes
-        // We'll use the "non-zero" fill rule
-        let shapePathDef = `<path d="`;
-
-        // First add the current shape with clockwise winding (positive area)
-        const shapePoints = getShapePoints(shape);
-        shapePathDef += `M ${shapePoints[0].x} ${shapePoints[0].y} `;
-        for (let j = 1; j < shapePoints.length; j++) {
-            shapePathDef += `L ${shapePoints[j].x} ${shapePoints[j].y} `;
-        }
-        shapePathDef += `Z `;
-
-        // Then subtract all higher shapes (counter-clockwise winding)
-        for (const higherShape of higherShapes) {
-            const higherPoints = getShapePoints(higherShape);
-            // Start at last point and go backwards
-            shapePathDef += `M ${higherPoints[higherPoints.length - 1].x} ${higherPoints[higherPoints.length - 1].y} `;
-            for (let j = higherPoints.length - 2; j >= 0; j--) {
-                shapePathDef += `L ${higherPoints[j].x} ${higherPoints[j].y} `;
-            }
-            shapePathDef += `Z `;
-        }
-
-        shapePathDef += `" fill="none" fill-rule="evenodd"/>`;
-
-        // Create a group for this shape's visible region
-        svgString += `  <!-- Shape ${i} (zIndex=${shape.zIndex}) -->
-  <g clip-path="url(#clip_path_${i})">
-`;
-
-        // Add the clip path definition to the SVG
-        svgString += `    <defs>
-      <clipPath id="clip_path_${i}">
-        ${shapePathDef}
+        svgString += `  <g id="shape_${i}" inkscape:label="Shape ${shape.zIndex}" inkscape:groupmode="layer">
+    <defs>
+      <clipPath id="clip_${i}">
+        ${getShapePath(shape)}
       </clipPath>
     </defs>
+    <g clip-path="url(#clip_${i})">
 `;
 
         // Add each hatching direction
@@ -534,12 +567,145 @@ function generateExclusiveSVG() {
             const lines = generateHatchingData(shape, angle, pattern.spacing);
 
             for (const line of lines) {
-                svgString += `    <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
+                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
 `;
             }
         }
 
-        svgString += `  </g>
+        svgString += `    </g>
+  </g>
+`;
+    }
+
+    // Get segments for outlines
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+
+    // Create a separate layer for outlines (on top)
+    svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
+`;
+
+    // Add SVG for each outline segment
+    for (let seg of outerSegments) {
+        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
+`;
+    }
+
+    // Close the outlines layer
+    svgString += `  </g>
+`;
+
+    // Close SVG
+    svgString += `</svg>`;
+    return svgString;
+}
+
+// Generate SVG with true non-overlapping hatching (Mode 3)
+function generateExclusiveHatchingSVG() {
+    // Start SVG with proper header
+    let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+  
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="white"/>
+  
+  <!-- Mode: True Exclusive Hatching -->
+`;
+
+    // Define hatching patterns
+    const hatchingPatterns = [
+        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
+        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
+        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
+        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
+        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
+        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
+        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
+        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
+    ];
+
+    // Sort shapes by zIndex, from bottom to top
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // Create visible areas using difference operations
+    svgString += `  <defs>
+`;
+
+    // For each shape, create a visible region by subtracting higher shapes
+    for (let i = 0; i < sortedShapes.length; i++) {
+        const shape = sortedShapes[i];
+
+        // Create path for this shape
+        svgString += `    <clipPath id="visibleArea_${i}">
+      <path d="`;
+
+        // Start with the current shape's path
+        const shapePoints = getShapePoints(shape);
+        svgString += `M ${shapePoints[0].x} ${shapePoints[0].y} `;
+        for (let j = 1; j < shapePoints.length; j++) {
+            svgString += `L ${shapePoints[j].x} ${shapePoints[j].y} `;
+        }
+        svgString += `Z" />
+    </clipPath>
+    
+    <!-- Mask for overlapping areas -->
+    <mask id="overlap_mask_${i}" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
+      <!-- White background = allow drawing -->
+      <rect x="0" y="0" width="${width}" height="${height}" fill="white" />
+      
+      <!-- Black shapes = prevent drawing -->
+`;
+
+        // Add higher-zIndex shapes as black shapes in the mask
+        for (let j = 0; j < sortedShapes.length; j++) {
+            const otherShape = sortedShapes[j];
+            if (otherShape.zIndex > shape.zIndex) {
+                svgString += `      <g fill="black">
+        ${getShapePath(otherShape)}
+      </g>
+`;
+            }
+        }
+
+        svgString += `    </mask>
+`;
+    }
+
+    svgString += `  </defs>
+`;
+
+    // Draw each shape with its non-overlapping hatching
+    for (let i = 0; i < sortedShapes.length; i++) {
+        const shape = sortedShapes[i];
+        const patternIndex = i % hatchingPatterns.length;
+        const pattern = hatchingPatterns[patternIndex];
+
+        svgString += `  <g id="shape_${i}" inkscape:label="Shape ${shape.zIndex}" inkscape:groupmode="layer">
+    <!-- Clip to this shape and mask out higher shapes -->
+    <g clip-path="url(#visibleArea_${i})" mask="url(#overlap_mask_${i})">
+`;
+
+        // Add each hatching direction
+        for (const angle of pattern.angles) {
+            const lines = generateHatchingData(shape, angle, pattern.spacing);
+
+            for (const line of lines) {
+                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
+`;
+            }
+        }
+
+        svgString += `    </g>
+  </g>
 `;
     }
 
@@ -578,16 +744,22 @@ function keyPressed() {
         renderMode = 1;
         console.log("Switched to Mode 1: Layered Hatching");
     } else if (key === '2') {
-        // Switch to Mode 2: Exclusive Hatching
+        // Switch to Mode 2: Grid Effect Hatching
         renderMode = 2;
-        console.log("Switched to Mode 2: Exclusive Hatching");
+        console.log("Switched to Mode 2: Grid Effect Hatching");
+    } else if (key === '3') {
+        // Switch to Mode 3: True Exclusive Hatching
+        renderMode = 3;
+        console.log("Switched to Mode 3: True Exclusive Hatching");
     } else if (key === 's') {
         // Generate SVG string with the current mode
         let svgContent;
         if (renderMode === 1) {
             svgContent = generateLayeredSVG();
+        } else if (renderMode === 2) {
+            svgContent = generateGridEffectSVG();
         } else {
-            svgContent = generateExclusiveSVG();
+            svgContent = generateExclusiveHatchingSVG();
         }
 
         // Create a Blob with the SVG content
