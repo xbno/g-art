@@ -1,11 +1,12 @@
 let shapes = [];
+let renderMode = 1; // Default: 1 = layered hatching, 2 = exclusive hatching
 
 function setup() {
     createCanvas(1200, 1800);
     background(255); // White background
 
     // Generate k random shapes
-    let k = floor(random(15, 45)); // Random number of total shapes
+    let k = floor(random(15, 35)); // Random number of total shapes
     for (let i = 0; i < k; i++) {
         let x = random(100, width - 200);
         let y = random(100, height - 200);
@@ -24,7 +25,8 @@ function setup() {
                     x: x,
                     y: y,
                     size: diameter,
-                    color: color(random(255), random(255), random(255))
+                    color: color(random(255), random(255), random(255)),
+                    zIndex: i // Higher zIndex means the shape is on top
                 });
             }
         } else if (shapeType === 'square') {
@@ -37,7 +39,8 @@ function setup() {
                     x: x,
                     y: y,
                     size: size,
-                    color: color(random(255), random(255), random(255))
+                    color: color(random(255), random(255), random(255)),
+                    zIndex: i
                 });
             }
         } else { // triangle
@@ -57,7 +60,8 @@ function setup() {
                     y: y,
                     size: R,
                     rotation: rotation,
-                    color: color(random(255), random(255), random(255))
+                    color: color(random(255), random(255), random(255)),
+                    zIndex: i
                 });
             }
         }
@@ -65,9 +69,6 @@ function setup() {
 }
 
 function draw() {
-    // Set blend mode to DIFFERENCE for fills
-    // blendMode(DIFFERENCE);
-
     // Step 1: Draw fills without stroke
     noStroke();
     let colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"]; // Pleasant color palette
@@ -270,13 +271,34 @@ function getShapeBoundingBox(shape) {
     };
 }
 
-// Generate hatching lines at a specific angle for a shape
-function generateHatchingLines(shape, angle, spacing) {
+// Generate the SVG shape path definition
+function getShapePath(shape) {
+    if (shape.type === 'circle') {
+        return `<circle cx="${shape.x}" cy="${shape.y}" r="${shape.size / 2}"/>`;
+    } else {
+        const points = getShapePoints(shape);
+        let pathData = '';
+
+        points.forEach((p, i) => {
+            if (i === 0) {
+                pathData += `M ${p.x} ${p.y} `;
+            } else {
+                pathData += `L ${p.x} ${p.y} `;
+            }
+        });
+
+        pathData += 'Z';
+        return `<path d="${pathData}"/>`;
+    }
+}
+
+// Generate hatching lines data for a shape
+function generateHatchingData(shape, angle, spacing) {
     // Get the shape's bounding box
     const bbox = getShapeBoundingBox(shape);
 
     // Add some padding to ensure we cover the entire shape
-    const padding = 50; // Adjust as needed
+    const padding = 50;
     bbox.x -= padding;
     bbox.y -= padding;
     bbox.width += padding * 2;
@@ -285,102 +307,56 @@ function generateHatchingLines(shape, angle, spacing) {
     // Calculate the angle in radians
     const angleRad = angle * (Math.PI / 180);
 
-    // Determine the length of the diagonal of the bounding box
+    // Get the diagonal length
     const diagonalLength = Math.sqrt(bbox.width * bbox.width + bbox.height * bbox.height);
 
-    // Calculate the perpendicular direction to find parallel lines
+    // Calculate perpendicular direction
     const perpAngle = angleRad + Math.PI / 2;
     const perpX = Math.cos(perpAngle);
     const perpY = Math.sin(perpAngle);
 
-    // Calculate the start position (corner of bbox)
+    // Center of bounding box
     const centerX = bbox.x + bbox.width / 2;
     const centerY = bbox.y + bbox.height / 2;
 
-    // Calculate how many lines we need
+    // Calculate number of lines
     const numLines = Math.ceil(diagonalLength / spacing) * 2;
     const startOffset = -diagonalLength;
 
-    // Store all hatch lines
-    const hatchLines = [];
+    let lines = [];
 
-    // Generate lines
+    // Generate all hatch lines
     for (let i = 0; i < numLines; i++) {
         const offset = startOffset + i * spacing;
 
-        // Calculate start point of the line
+        // Calculate start point
         const startX = centerX + perpX * offset;
         const startY = centerY + perpY * offset;
 
-        // Calculate direction vector of the line
+        // Calculate direction vector
         const dirX = Math.cos(angleRad);
         const dirY = Math.sin(angleRad);
 
-        // Calculate endpoints of the line (extending beyond the bounding box)
+        // Calculate line endpoints (extending beyond bbox)
         const lineStartX = startX - dirX * diagonalLength;
         const lineStartY = startY - dirY * diagonalLength;
         const lineEndX = startX + dirX * diagonalLength;
         const lineEndY = startY + dirY * diagonalLength;
 
-        // Clip the line against the shape's boundary
-        // We'll use an array to collect intersection points
-        const intersections = [];
-
-        // Get the shape's outline segments
-        const outlineSegments = getOutlineSegments(shape);
-
-        // Check for intersections with each segment
-        for (const seg of outlineSegments) {
-            const intersection = findIntersection({
-                start: { x: lineStartX, y: lineStartY },
-                end: { x: lineEndX, y: lineEndY }
-            }, seg);
-
-            if (intersection) {
-                intersections.push(intersection);
-            }
-        }
-
-        // If we have at least 2 intersections, we can draw a line segment
-        if (intersections.length >= 2) {
-            // Sort intersections by distance from line start
-            intersections.sort((a, b) => {
-                const distA = Math.pow(a.x - lineStartX, 2) + Math.pow(a.y - lineStartY, 2);
-                const distB = Math.pow(b.x - lineStartX, 2) + Math.pow(b.y - lineStartY, 2);
-                return distA - distB;
-            });
-
-            // Group intersections into pairs
-            for (let j = 0; j < intersections.length - 1; j += 2) {
-                const int1 = intersections[j];
-                const int2 = intersections[j + 1];
-
-                // Skip if we don't have a pair
-                if (!int2) continue;
-
-                // Calculate midpoint of the line segment
-                const midX = (int1.x + int2.x) / 2;
-                const midY = (int1.y + int2.y) / 2;
-
-                // Check if midpoint is inside the shape
-                if (pointInShape(midX, midY, shape)) {
-                    hatchLines.push({
-                        x1: int1.x,
-                        y1: int1.y,
-                        x2: int2.x,
-                        y2: int2.y
-                    });
-                }
-            }
-        }
+        lines.push({
+            x1: lineStartX,
+            y1: lineStartY,
+            x2: lineEndX,
+            y2: lineEndY
+        });
     }
 
-    return hatchLines;
+    return lines;
 }
 
-// Generate SVG string with hatching for plotter art
-function generateSVG() {
-    // Start SVG with proper header and Inkscape namespaces
+// Generate SVG string with layered hatching (Mode 1)
+function generateLayeredSVG() {
+    // Start SVG with proper header
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
@@ -390,50 +366,179 @@ function generateSVG() {
   
   <!-- Background -->
   <rect width="${width}" height="${height}" fill="white"/>
+  
+  <!-- Mode: Layered Hatching -->
+  
+  <defs>
 `;
 
-    // Define hatching patterns (8 patterns as requested)
+    // Define hatching patterns
     const hatchingPatterns = [
-        { angles: [45], spacing: 6 },   // Pattern 1: diagonal crosshatch
-        { angles: [-45], spacing: 6 },   // Pattern 1: diagonal crosshatch
-        { angles: [0], spacing: 6 },     // Pattern 2: grid
-        { angles: [90], spacing: 6 },     // Pattern 2: grid
-        { angles: [-15], spacing: 6 },   // Pattern 3: shallow crosshatch
-        { angles: [15], spacing: 6 },   // Pattern 3: shallow crosshatch
-        { angles: [-60], spacing: 6 },   // Pattern 4: steep crosshatch
-        { angles: [60], spacing: 6 },   // Pattern 4: steep crosshatch
-        { angles: [-30], spacing: 6 },   // Pattern 5: mixed angle
-        { angles: [30], spacing: 6 },   // Pattern 5: mixed angle
-        // { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
-        // { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
-        // { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
+        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
+        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
+        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
+        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
+        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
+        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
+        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
+        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
     ];
 
-    // Create a separate layer for each shape with its hatching
+    // Create clip paths for each shape
+    for (let i = 0; i < shapes.length; i++) {
+        const shape = shapes[i];
+        svgString += `    <clipPath id="shape_clip_${i}">
+      ${getShapePath(shape)}
+    </clipPath>
+`;
+    }
+
+    svgString += `  </defs>
+`;
+
+    // Draw each shape with its hatching pattern
     for (let i = 0; i < shapes.length; i++) {
         const shape = shapes[i];
         const patternIndex = i % hatchingPatterns.length;
         const pattern = hatchingPatterns[patternIndex];
 
-        // Create a layer for this shape
-        svgString += `  <g id="shape${i}" 
-     inkscape:label="Shape ${i}" 
-     inkscape:groupmode="layer"
-     sodipodi:insensitive="false">
+        svgString += `  <g id="shape_${i}" inkscape:label="Shape ${i}" inkscape:groupmode="layer">
+    <g clip-path="url(#shape_clip_${i})">
 `;
 
-        // Create hatch pattern lines for this shape
+        // Add each hatching direction
         for (const angle of pattern.angles) {
-            const hatchLines = generateHatchingLines(shape, angle, pattern.spacing);
+            const lines = generateHatchingData(shape, angle, pattern.spacing);
 
-            // Add all hatching lines for this angle
-            for (const line of hatchLines) {
-                svgString += `    <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1" />
+            for (const line of lines) {
+                svgString += `      <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
 `;
             }
         }
 
-        // Close the shape layer
+        svgString += `    </g>
+  </g>
+`;
+    }
+
+    // Get segments for outlines
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+
+    // Create a separate layer for outlines (on top)
+    svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
+`;
+
+    // Add SVG for each outline segment
+    for (let seg of outerSegments) {
+        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
+`;
+    }
+
+    // Close the outlines layer
+    svgString += `  </g>
+`;
+
+    // Close SVG
+    svgString += `</svg>`;
+    return svgString;
+}
+
+// Generate SVG string with exclusive hatching (Mode 2)
+function generateExclusiveSVG() {
+    // Start SVG with proper header
+    let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+  
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="white"/>
+  
+  <!-- Mode: Exclusive Hatching -->
+`;
+
+    // Define hatching patterns
+    const hatchingPatterns = [
+        { angles: [-45, 45], spacing: 12 },   // Pattern 1: diagonal crosshatch
+        { angles: [0, 90], spacing: 12 },     // Pattern 2: grid
+        { angles: [-15, 15], spacing: 12 },   // Pattern 3: shallow crosshatch
+        { angles: [-60, 60], spacing: 12 },   // Pattern 4: steep crosshatch
+        { angles: [-30, 60], spacing: 12 },   // Pattern 5: mixed angle
+        { angles: [0], spacing: 8 },          // Pattern 6: horizontal (denser)
+        { angles: [45], spacing: 8 },         // Pattern 7: diagonal (denser)
+        { angles: [-75, 15], spacing: 12 }    // Pattern 8: uneven angles
+    ];
+
+    // Sort shapes by zIndex, from bottom to top
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // Process each visible region
+    // We'll create a composite path for each region of overlapping shapes
+    // For each shape, we need to subtract all higher shapes from it
+    for (let i = 0; i < sortedShapes.length; i++) {
+        const shape = sortedShapes[i];
+        const patternIndex = i % hatchingPatterns.length;
+        const pattern = hatchingPatterns[patternIndex];
+
+        // Get all higher shapes (shapes that would be on top of this one)
+        const higherShapes = sortedShapes.filter(s => s.zIndex > shape.zIndex);
+
+        // Create a shape definition that excludes all higher shapes
+        // We'll use the "non-zero" fill rule
+        let shapePathDef = `<path d="`;
+
+        // First add the current shape with clockwise winding (positive area)
+        const shapePoints = getShapePoints(shape);
+        shapePathDef += `M ${shapePoints[0].x} ${shapePoints[0].y} `;
+        for (let j = 1; j < shapePoints.length; j++) {
+            shapePathDef += `L ${shapePoints[j].x} ${shapePoints[j].y} `;
+        }
+        shapePathDef += `Z `;
+
+        // Then subtract all higher shapes (counter-clockwise winding)
+        for (const higherShape of higherShapes) {
+            const higherPoints = getShapePoints(higherShape);
+            // Start at last point and go backwards
+            shapePathDef += `M ${higherPoints[higherPoints.length - 1].x} ${higherPoints[higherPoints.length - 1].y} `;
+            for (let j = higherPoints.length - 2; j >= 0; j--) {
+                shapePathDef += `L ${higherPoints[j].x} ${higherPoints[j].y} `;
+            }
+            shapePathDef += `Z `;
+        }
+
+        shapePathDef += `" fill="none" fill-rule="evenodd"/>`;
+
+        // Create a group for this shape's visible region
+        svgString += `  <!-- Shape ${i} (zIndex=${shape.zIndex}) -->
+  <g clip-path="url(#clip_path_${i})">
+`;
+
+        // Add the clip path definition to the SVG
+        svgString += `    <defs>
+      <clipPath id="clip_path_${i}">
+        ${shapePathDef}
+      </clipPath>
+    </defs>
+`;
+
+        // Add each hatching direction
+        for (const angle of pattern.angles) {
+            const lines = generateHatchingData(shape, angle, pattern.spacing);
+
+            for (const line of lines) {
+                svgString += `    <line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="black" stroke-width="1"/>
+`;
+            }
+        }
+
         svgString += `  </g>
 `;
     }
@@ -448,15 +553,12 @@ function generateSVG() {
     let outerSegments = filterOuterSegments(splitSegments);
 
     // Create a separate layer for outlines (on top)
-    svgString += `  <g id="outlines" 
-     inkscape:label="Outlines" 
-     inkscape:groupmode="layer"
-     sodipodi:insensitive="false">
+    svgString += `  <g id="outlines" inkscape:label="Outlines" inkscape:groupmode="layer">
 `;
 
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
-        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10" />
+        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10"/>
 `;
     }
 
@@ -469,20 +571,33 @@ function generateSVG() {
     return svgString;
 }
 
-// Handle saving SVG
+// Handle saving SVG using direct browser download
 function keyPressed() {
-    if (key === 's') {
-        // Generate SVG string with hatching
-        const svgContent = generateSVG();
+    if (key === '1') {
+        // Switch to Mode 1: Layered Hatching
+        renderMode = 1;
+        console.log("Switched to Mode 1: Layered Hatching");
+    } else if (key === '2') {
+        // Switch to Mode 2: Exclusive Hatching
+        renderMode = 2;
+        console.log("Switched to Mode 2: Exclusive Hatching");
+    } else if (key === 's') {
+        // Generate SVG string with the current mode
+        let svgContent;
+        if (renderMode === 1) {
+            svgContent = generateLayeredSVG();
+        } else {
+            svgContent = generateExclusiveSVG();
+        }
 
         // Create a Blob with the SVG content
         const blob = new Blob([svgContent], { type: 'image/svg+xml' });
 
-        // Create a download link
+        // Create a download link with the mode indicated in the filename
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
-        link.download = "hatched_blobs_" + Date.now() + ".svg";
+        link.download = `hatched_blobs_mode${renderMode}_${Date.now()}.svg`;
 
         // Append to body, click and remove
         document.body.appendChild(link);
@@ -492,6 +607,6 @@ function keyPressed() {
         // Clean up
         URL.revokeObjectURL(url);
 
-        console.log("Hatched SVG saved!");
+        console.log(`Mode ${renderMode} SVG saved!`);
     }
 }
