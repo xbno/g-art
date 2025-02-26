@@ -8,7 +8,7 @@ function setup() {
     background(255); // White background
 
     // Generate k random shapes
-    let k = floor(random(10, 15)); // Random number of total shapes
+    let k = floor(random(10, 45)); // Random number of total shapes
     for (let i = 0; i < k; i++) {
         let x = random(100, width - 200);
         let y = random(100, height - 200);
@@ -250,33 +250,76 @@ function filterOuterSegments(segments) {
     });
 }
 
-// Generate SVG string directly
+// Generate SVG string with layers for Inkscape
 function generateSVG() {
-    // Start SVG with proper header
+    // Start SVG with proper header and Inkscape namespaces
     let svgString = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
   <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" 
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+    
+    <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
   `;
 
-    // Add SVG for each shape fill
+    // Get the colors we're using
     const colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"];
-    for (let shape of shapes) {
-        const colorIndex = Math.floor(Math.random() * colors.length);
-        const fillColor = colors[colorIndex];
 
-        if (shape.type === 'circle') {
-            svgString += `  <circle cx="${shape.x}" cy="${shape.y}" r="${shape.size / 2}" fill="${fillColor}" stroke="none" />\n`;
+    // Group shapes by color
+    const colorGroups = {};
+    for (const color of colors) {
+        colorGroups[color] = [];
+    }
+
+    // Assign shapes to their color groups
+    for (let i = 0; i < shapes.length; i++) {
+        const shape = shapes[i];
+        const fillColor = colors[i % colors.length];
+        shape.fillColor = fillColor;
+
+        if (!colorGroups[fillColor]) {
+            colorGroups[fillColor] = [];
         }
-        else if (shape.type === 'square') {
-            const x = shape.x - shape.size / 2;
-            const y = shape.y - shape.size / 2;
-            svgString += `  <rect x="${x}" y="${y}" width="${shape.size}" height="${shape.size}" fill="${fillColor}" stroke="none" />\n`;
-        }
-        else if (shape.type === 'triangle') {
-            const points = getShapePoints(shape);
-            const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
-            svgString += `  <polygon points="${pointsStr}" fill="${fillColor}" stroke="none" />\n`;
+        colorGroups[fillColor].push(shape);
+    }
+
+    // Create a separate layer for each color
+    let layerIndex = 1;
+    for (const color in colorGroups) {
+        if (colorGroups[color].length > 0) {
+            const colorName = color.substring(1); // Remove # from color code
+            svgString += `  <g id="layer${layerIndex}" 
+       inkscape:label="Fill ${color}" 
+       inkscape:groupmode="layer"
+       sodipodi:insensitive="false">
+  `;
+
+            // Add all shapes with this fill color
+            for (let shape of colorGroups[color]) {
+                if (shape.type === 'circle') {
+                    svgString += `    <circle cx="${shape.x}" cy="${shape.y}" r="${shape.size / 2}" fill="${color}" stroke="none" />
+  `;
+                }
+                else if (shape.type === 'square') {
+                    const x = shape.x - shape.size / 2;
+                    const y = shape.y - shape.size / 2;
+                    svgString += `    <rect x="${x}" y="${y}" width="${shape.size}" height="${shape.size}" fill="${color}" stroke="none" />
+  `;
+                }
+                else if (shape.type === 'triangle') {
+                    const points = getShapePoints(shape);
+                    const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
+                    svgString += `    <polygon points="${pointsStr}" fill="${color}" stroke="none" />
+  `;
+                }
+            }
+
+            // Close the color layer
+            svgString += `  </g>
+  `;
+            layerIndex++;
         }
     }
 
@@ -289,20 +332,32 @@ function generateSVG() {
     let splitSegments = splitSegmentsAtIntersections(allSegments);
     let outerSegments = filterOuterSegments(splitSegments);
 
+    // Create a separate layer for outlines (on top)
+    svgString += `  <g id="layer${layerIndex}" 
+       inkscape:label="Outlines" 
+       inkscape:groupmode="layer"
+       sodipodi:insensitive="false">
+  `;
+
     // Add SVG for each outline segment
     for (let seg of outerSegments) {
-        svgString += `  <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10" />\n`;
+        svgString += `    <line x1="${seg.start.x}" y1="${seg.start.y}" x2="${seg.end.x}" y2="${seg.end.y}" stroke="black" stroke-width="10" />
+  `;
     }
 
+    // Close the outlines layer
+    svgString += `  </g>
+  `;
+
     // Close SVG
-    svgString += '</svg>';
+    svgString += `</svg>`;
     return svgString;
 }
 
 // Handle saving SVG
 function keyPressed() {
     if (key === 's') {
-        // Generate SVG string
+        // Generate SVG string with layers
         const svgContent = generateSVG();
 
         // Create a Blob with the SVG content
@@ -312,7 +367,7 @@ function keyPressed() {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
-        link.download = "my_blobs_" + Date.now() + ".svg";
+        link.download = "layered_blobs_" + Date.now() + ".svg";
 
         // Append to body, click and remove
         document.body.appendChild(link);
@@ -322,6 +377,6 @@ function keyPressed() {
         // Clean up
         URL.revokeObjectURL(url);
 
-        console.log("SVG saved!");
+        console.log("Layered SVG saved!");
     }
 }
