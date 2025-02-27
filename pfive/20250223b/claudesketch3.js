@@ -150,7 +150,7 @@ function drawShapeFill(shape) {
 function getShapePoints(shape) {
     let points = [];
     if (shape.type === 'circle') {
-        let numSides = 32;
+        let numSides = 64;
         let radius = shape.size / 2;
         for (let i = 0; i < numSides; i++) {
             let angle = TWO_PI / numSides * i;
