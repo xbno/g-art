@@ -175,154 +175,142 @@ class HatchingGenerator:
             shape.color_index = i % len(self.colors)
 
     def calculate_effective_regions(self):
-        """Calculate the effective regions for each color, respecting z-index"""
-        # Sort shapes by z-index
+        """Calculate the effective regions for each shape, respecting z-index"""
+        # Sort shapes by z-index (low to high)
         sorted_shapes = sorted(self.shapes, key=lambda s: s.z_index)
 
-        # Find unique color indices
-        color_indices = set([shape.color_index for shape in self.shapes])
-
-        # Create a dictionary to hold merged polygons for each color
-        color_regions = {color_idx: [] for color_idx in color_indices}
+        # Create a list to hold processed regions for each shape
+        shape_regions = []
 
         # Process shapes in z-index order (back to front)
         for shape in sorted_shapes:
-            # Add this shape to its color region
-            color_regions[shape.color_index].append(shape.polygon)
+            # Start with the original shape polygon
+            region = shape.polygon
 
-            # For any shape, subtract its area from any lower z-index colors
+            # Iterate through all shapes with higher z-index
             for other_shape in sorted_shapes:
-                if other_shape.z_index < shape.z_index:
-                    for i, region in enumerate(color_regions[other_shape.color_index]):
-                        if region.intersects(shape.polygon):
-                            try:
-                                # Remove the intersection from the region
-                                difference = region.difference(shape.polygon)
-                                if not difference.is_empty:
-                                    color_regions[other_shape.color_index][
-                                        i
-                                    ] = difference
-                                else:
-                                    # If the region is completely covered, mark for removal
-                                    color_regions[other_shape.color_index][i] = None
-                            except Exception as e:
-                                print(f"Error in difference operation: {e}")
-                                # Keep original region if difference fails
-                                pass
+                if other_shape.z_index > shape.z_index:
+                    try:
+                        # Subtract any overlapping area from higher z-index shapes
+                        if region.intersects(other_shape.polygon):
+                            difference = region.difference(other_shape.polygon)
+                            if not difference.is_empty:
+                                region = difference
+                            else:
+                                # This shape is completely covered by higher z-index shapes
+                                region = None
+                                break
+                    except Exception as e:
+                        print(f"Error in difference operation: {e}")
+                        # Continue with original region if difference fails
+                        pass
 
-                    # Remove None entries
-                    color_regions[other_shape.color_index] = [
-                        r
-                        for r in color_regions[other_shape.color_index]
-                        if r is not None
-                    ]
+            # If the shape isn't completely covered, add it to our regions
+            if region is not None and not region.is_empty:
+                shape_regions.append(
+                    {"shape": shape, "region": region, "color_index": shape.color_index}
+                )
 
-        return color_regions
+        return shape_regions
 
-    def generate_hatching_lines(self, color_regions):
-        """Generate hatching lines for each color region"""
+    def generate_hatching_lines(self, shape_regions):
+        """Generate hatching lines for each shape's effective region"""
         hatching_lines = {}
 
-        for color_idx, regions in color_regions.items():
-            if not regions:
-                continue
+        # Process each shape's region
+        for i, shape_data in enumerate(shape_regions):
+            shape = shape_data["shape"]
+            region = shape_data["region"]
+            color_idx = shape_data["color_index"]
+
+            # Initialize this color's lines list if it doesn't exist
+            if color_idx not in hatching_lines:
+                hatching_lines[color_idx] = []
 
             # Get the hatching pattern for this color
             pattern = self.hatching_patterns[color_idx % len(self.hatching_patterns)]
 
-            # Process each region separately to avoid union issues
-            hatching_lines[color_idx] = []
+            try:
+                # Calculate a bounding box for the region
+                bounds = region.bounds  # (minx, miny, maxx, maxy)
 
-            for region in regions:
-                try:
-                    # Calculate a bounding box for the region
-                    bounds = region.bounds  # (minx, miny, maxx, maxy)
+                # Add padding to ensure coverage
+                padding = 100
+                minx, miny, maxx, maxy = bounds
+                minx -= padding
+                miny -= padding
+                maxx += padding
+                maxy += padding
 
-                    # Add padding to ensure coverage
-                    padding = 100
-                    minx, miny, maxx, maxy = bounds
-                    minx -= padding
-                    miny -= padding
-                    maxx += padding
-                    maxy += padding
+                # Process each angle in the pattern
+                for angle in pattern["angles"]:
+                    # Calculate angle in radians
+                    angle_rad = angle * (math.pi / 180)
 
-                    # Process each angle in the pattern
-                    for angle in pattern["angles"]:
-                        # Calculate angle in radians
-                        angle_rad = angle * (math.pi / 180)
+                    # Calculate perpendicular direction
+                    perp_angle = angle_rad + math.pi / 2
+                    perp_x = math.cos(perp_angle)
+                    perp_y = math.sin(perp_angle)
 
-                        # Calculate perpendicular direction
-                        perp_angle = angle_rad + math.pi / 2
-                        perp_x = math.cos(perp_angle)
-                        perp_y = math.sin(perp_angle)
+                    # Calculate diagonal length for full coverage
+                    diagonal_length = math.sqrt((maxx - minx) ** 2 + (maxy - miny) ** 2)
 
-                        # Calculate diagonal length for full coverage
-                        diagonal_length = math.sqrt(
-                            (maxx - minx) ** 2 + (maxy - miny) ** 2
-                        )
+                    # Calculate center point
+                    center_x = (minx + maxx) / 2
+                    center_y = (miny + maxy) / 2
 
-                        # Calculate center point
-                        center_x = (minx + maxx) / 2
-                        center_y = (miny + maxy) / 2
+                    # Calculate number of lines needed
+                    spacing = pattern["spacing"]
+                    num_lines = math.ceil(diagonal_length / spacing) * 2
+                    start_offset = -diagonal_length / 2
 
-                        # Calculate number of lines needed
-                        spacing = pattern["spacing"]
-                        num_lines = math.ceil(diagonal_length / spacing) * 2
-                        start_offset = -diagonal_length / 2
+                    # Direction vector
+                    dir_x = math.cos(angle_rad)
+                    dir_y = math.sin(angle_rad)
 
-                        # Direction vector
-                        dir_x = math.cos(angle_rad)
-                        dir_y = math.sin(angle_rad)
+                    # Generate hatching lines
+                    for i in range(num_lines):
+                        offset = start_offset + i * spacing
 
-                        # Generate hatching lines
-                        for i in range(num_lines):
-                            offset = start_offset + i * spacing
+                        # Calculate offset point
+                        offset_x = perp_x * offset
+                        offset_y = perp_y * offset
 
-                            # Calculate offset point
-                            offset_x = perp_x * offset
-                            offset_y = perp_y * offset
+                        # Create a very long line
+                        start_x = center_x + offset_x - dir_x * diagonal_length
+                        start_y = center_y + offset_y - dir_y * diagonal_length
+                        end_x = center_x + offset_x + dir_x * diagonal_length
+                        end_y = center_y + offset_y + dir_y * diagonal_length
 
-                            # Create a very long line
-                            start_x = center_x + offset_x - dir_x * diagonal_length
-                            start_y = center_y + offset_y - dir_y * diagonal_length
-                            end_x = center_x + offset_x + dir_x * diagonal_length
-                            end_y = center_y + offset_y + dir_y * diagonal_length
+                        hatch_line = LineString([(start_x, start_y), (end_x, end_y)])
 
-                            hatch_line = LineString(
-                                [(start_x, start_y), (end_x, end_y)]
-                            )
-
-                            # Clip line to the region
-                            try:
-                                intersection = hatch_line.intersection(region)
-                                if not intersection.is_empty:
-                                    if intersection.geom_type == "LineString":
-                                        coords = list(intersection.coords)
+                        # Clip line to the region
+                        try:
+                            intersection = hatch_line.intersection(region)
+                            if not intersection.is_empty:
+                                if intersection.geom_type == "LineString":
+                                    coords = list(intersection.coords)
+                                    if len(coords) >= 2:  # Ensure we have valid line
+                                        hatching_lines[color_idx].append(coords)
+                                elif intersection.geom_type == "MultiLineString":
+                                    for line in intersection.geoms:
+                                        coords = list(line.coords)
                                         if (
                                             len(coords) >= 2
                                         ):  # Ensure we have valid line
                                             hatching_lines[color_idx].append(coords)
-                                    elif intersection.geom_type == "MultiLineString":
-                                        for line in intersection.geoms:
-                                            coords = list(line.coords)
-                                            if (
-                                                len(coords) >= 2
-                                            ):  # Ensure we have valid line
+                                elif intersection.geom_type == "GeometryCollection":
+                                    for geom in intersection.geoms:
+                                        if geom.geom_type == "LineString":
+                                            coords = list(geom.coords)
+                                            if len(coords) >= 2:
                                                 hatching_lines[color_idx].append(coords)
-                                    elif intersection.geom_type == "GeometryCollection":
-                                        for geom in intersection.geoms:
-                                            if geom.geom_type == "LineString":
-                                                coords = list(geom.coords)
-                                                if len(coords) >= 2:
-                                                    hatching_lines[color_idx].append(
-                                                        coords
-                                                    )
-                            except Exception as e:
-                                print(f"Error clipping line: {e}")
-                                continue
-                except Exception as e:
-                    print(f"Error processing region for color {color_idx}: {e}")
-                    continue
+                        except Exception as e:
+                            print(f"Error clipping line: {e}")
+                            continue
+            except Exception as e:
+                print(f"Error processing region for shape with color {color_idx}: {e}")
+                continue
 
         return hatching_lines
 
@@ -419,8 +407,8 @@ class HatchingGenerator:
 
         if show_hatching:
             # Calculate effective regions and hatching lines
-            color_regions = self.calculate_effective_regions()
-            hatching_lines = self.generate_hatching_lines(color_regions)
+            shape_regions = self.calculate_effective_regions()
+            hatching_lines = self.generate_hatching_lines(shape_regions)
 
             # Draw hatching lines
             for color_idx, lines in hatching_lines.items():
@@ -446,7 +434,7 @@ class HatchingGenerator:
         plt.show()
 
     def visualize_color_regions(self):
-        """Visualize the effective regions for each color"""
+        """Visualize the effective regions for each shape"""
         fig, ax = plt.subplots(figsize=(12, 18))
         ax.set_xlim(0, self.width)
         ax.set_ylim(0, self.height)
@@ -458,42 +446,43 @@ class HatchingGenerator:
             ax.add_patch(patch)
 
         # Calculate effective regions
-        color_regions = self.calculate_effective_regions()
+        shape_regions = self.calculate_effective_regions()
 
-        # Draw outlines around effective regions for each color
+        # Draw outlines around effective regions for each shape
         outline_colors = ["red", "green", "blue", "orange", "purple"]
 
-        for color_idx, regions in color_regions.items():
+        for i, shape_data in enumerate(shape_regions):
+            shape = shape_data["shape"]
+            region = shape_data["region"]
+            color_idx = shape_data["color_index"]
+
             outline_color = outline_colors[color_idx % len(outline_colors)]
 
-            for region in regions:
-                try:
-                    if isinstance(region, ShapelyPolygon):
-                        # Extract coordinates from the polygon
-                        x, y = region.exterior.xy
-                        ax.plot(x, y, color=outline_color, linestyle="--", linewidth=2)
+            try:
+                if isinstance(region, ShapelyPolygon):
+                    # Extract coordinates from the polygon
+                    x, y = region.exterior.xy
+                    ax.plot(x, y, color=outline_color, linestyle="--", linewidth=2)
 
-                        # Add a label in the center of the region
-                        centroid = region.centroid
-                        ax.text(
-                            centroid.x,
-                            centroid.y,
-                            f"Color {color_idx}",
-                            ha="center",
-                            va="center",
-                            fontsize=14,
-                            color=outline_color,
-                            fontweight="bold",
-                        )
-                    elif isinstance(region, MultiPolygon):
-                        for poly in region.geoms:
-                            x, y = poly.exterior.xy
-                            ax.plot(
-                                x, y, color=outline_color, linestyle="--", linewidth=2
-                            )
-                except Exception as e:
-                    print(f"Error visualizing region: {e}")
-                    continue
+                    # Add a label in the center of the region
+                    centroid = region.centroid
+                    ax.text(
+                        centroid.x,
+                        centroid.y,
+                        f"C{color_idx}",
+                        ha="center",
+                        va="center",
+                        fontsize=14,
+                        color=outline_color,
+                        fontweight="bold",
+                    )
+                elif isinstance(region, MultiPolygon):
+                    for poly in region.geoms:
+                        x, y = poly.exterior.xy
+                        ax.plot(x, y, color=outline_color, linestyle="--", linewidth=2)
+            except Exception as e:
+                print(f"Error visualizing region: {e}")
+                continue
 
         # Add the main black outline
         outline_segments = self.find_composite_outline()
@@ -511,13 +500,11 @@ class HatchingGenerator:
         """Export the design as an SVG file"""
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(
-                os.path.expanduser("~/Downloads"), f"plotter_hatching_{timestamp}.svg"
-            )
+            filename = f"plotter_hatching_{timestamp}.svg"
 
         # Calculate effective regions and hatching lines
-        color_regions = self.calculate_effective_regions()
-        hatching_lines = self.generate_hatching_lines(color_regions)
+        shape_regions = self.calculate_effective_regions()
+        hatching_lines = self.generate_hatching_lines(shape_regions)
 
         # Find composite outline
         outline_segments = self.find_composite_outline()
@@ -562,7 +549,7 @@ class HatchingGenerator:
 # Usage example
 if __name__ == "__main__":
     # Create the generator
-    generator = HatchingGenerator(width=1200, height=1800, num_shapes=25)
+    generator = HatchingGenerator(width=1200, height=1800, num_shapes=15)
 
     # Optionally use a fixed scenario for debugging
     # generator.create_fixed_shape_scenario()
