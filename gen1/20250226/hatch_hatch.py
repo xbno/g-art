@@ -174,6 +174,46 @@ class HatchingGenerator:
         for i, shape in enumerate(self.shapes):
             shape.color_index = i % len(self.colors)
 
+    def calculate_unified_color_regions(self):
+        """Calculate unified regions for each color, merging all shapes of the same color"""
+        # Calculate effective regions first (respecting z-index)
+        shape_regions = self.calculate_effective_regions()
+
+        # Group by color_index
+        color_regions = {}
+
+        for shape_data in shape_regions:
+            color_idx = shape_data["color_index"]
+            region = shape_data["region"]
+
+            if color_idx not in color_regions:
+                color_regions[color_idx] = []
+
+            color_regions[color_idx].append(region)
+
+        # Merge all regions of the same color
+        unified_regions = {}
+        for color_idx, regions in color_regions.items():
+            if regions:
+                try:
+                    merged = unary_union(regions)
+                    if not merged.is_empty:
+                        unified_regions[color_idx] = merged
+                except Exception as e:
+                    print(f"Error merging regions for color {color_idx}: {e}")
+                    # If merge fails, just use the separate regions
+                    if regions:
+                        unified_regions[color_idx] = regions[0]
+                        for r in regions[1:]:
+                            try:
+                                unified_regions[color_idx] = unified_regions[
+                                    color_idx
+                                ].union(r)
+                            except:
+                                pass
+
+        return unified_regions
+
     def calculate_effective_regions(self):
         """Calculate the effective regions for each shape, respecting z-index"""
         # Sort shapes by z-index (low to high)
@@ -213,19 +253,17 @@ class HatchingGenerator:
 
         return shape_regions
 
-    def generate_hatching_lines(self, shape_regions):
-        """Generate hatching lines for each shape's effective region"""
+    def generate_global_hatching_lines(self):
+        """Generate hatching lines based on unified color regions"""
         hatching_lines = {}
 
-        # Process each shape's region
-        for i, shape_data in enumerate(shape_regions):
-            shape = shape_data["shape"]
-            region = shape_data["region"]
-            color_idx = shape_data["color_index"]
+        # Get unified color regions
+        unified_regions = self.calculate_unified_color_regions()
 
-            # Initialize this color's lines list if it doesn't exist
-            if color_idx not in hatching_lines:
-                hatching_lines[color_idx] = []
+        # Create global hatching for each color
+        for color_idx, region in unified_regions.items():
+            # Initialize this color's lines list
+            hatching_lines[color_idx] = []
 
             # Get the hatching pattern for this color
             pattern = self.hatching_patterns[color_idx % len(self.hatching_patterns)]
@@ -268,7 +306,7 @@ class HatchingGenerator:
                     dir_x = math.cos(angle_rad)
                     dir_y = math.sin(angle_rad)
 
-                    # Generate hatching lines
+                    # Generate hatching lines spanning the entire canvas
                     for i in range(num_lines):
                         offset = start_offset + i * spacing
 
@@ -309,7 +347,7 @@ class HatchingGenerator:
                             print(f"Error clipping line: {e}")
                             continue
             except Exception as e:
-                print(f"Error processing region for shape with color {color_idx}: {e}")
+                print(f"Error processing region for color {color_idx}: {e}")
                 continue
 
         return hatching_lines
@@ -325,6 +363,9 @@ class HatchingGenerator:
             Shape("circle", 350, 550, 100, 2, 2),  # Small circle middle
             Shape("triangle", 800, 900, 350, 3, 3),  # Triangle bottom right
             Shape("square", 800, 1200, 300, 4, 4),  # Square bottom right
+            # Add overlapping shapes with same colors to test continuous hatching
+            Shape("square", 500, 500, 200, 0, 5),  # Same color as first shape
+            Shape("circle", 700, 700, 180, 1, 6),  # Same color as second shape
         ]
 
         # Ensure all shapes have the correct color_index
@@ -421,9 +462,8 @@ class HatchingGenerator:
         ax.add_collection(outline_collection)
 
         if show_hatching:
-            # Calculate effective regions and hatching lines
-            shape_regions = self.calculate_effective_regions()
-            hatching_lines = self.generate_hatching_lines(shape_regions)
+            # Calculate hatching lines using the new global method
+            hatching_lines = self.generate_global_hatching_lines()
 
             # Draw hatching lines
             for color_idx, lines in hatching_lines.items():
@@ -448,8 +488,8 @@ class HatchingGenerator:
         plt.tight_layout()
         plt.show()
 
-    def visualize_color_regions(self):
-        """Visualize the effective regions for each shape"""
+    def visualize_unified_color_regions(self):
+        """Visualize the unified regions for each color"""
         fig, ax = plt.subplots(figsize=(12, 18))
         ax.set_xlim(0, self.width)
         ax.set_ylim(0, self.height)
@@ -460,17 +500,13 @@ class HatchingGenerator:
             patch = shape.get_matplotlib_patch(color)
             ax.add_patch(patch)
 
-        # Calculate effective regions
-        shape_regions = self.calculate_effective_regions()
+        # Get unified color regions
+        unified_regions = self.calculate_unified_color_regions()
 
-        # Draw outlines around effective regions for each shape
+        # Draw outlines around unified regions for each color
         outline_colors = ["red", "green", "blue", "orange", "purple"]
 
-        for i, shape_data in enumerate(shape_regions):
-            shape = shape_data["shape"]
-            region = shape_data["region"]
-            color_idx = shape_data["color_index"]
-
+        for color_idx, region in unified_regions.items():
             outline_color = outline_colors[color_idx % len(outline_colors)]
 
             try:
@@ -495,6 +531,19 @@ class HatchingGenerator:
                     for poly in region.geoms:
                         x, y = poly.exterior.xy
                         ax.plot(x, y, color=outline_color, linestyle="--", linewidth=2)
+
+                        # Add a label in each part
+                        centroid = poly.centroid
+                        ax.text(
+                            centroid.x,
+                            centroid.y,
+                            f"C{color_idx}",
+                            ha="center",
+                            va="center",
+                            fontsize=14,
+                            color=outline_color,
+                            fontweight="bold",
+                        )
             except Exception as e:
                 print(f"Error visualizing region: {e}")
                 continue
@@ -517,9 +566,8 @@ class HatchingGenerator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"plotter_hatching_{timestamp}.svg"
 
-        # Calculate effective regions and hatching lines
-        shape_regions = self.calculate_effective_regions()
-        hatching_lines = self.generate_hatching_lines(shape_regions)
+        # Calculate global hatching lines
+        hatching_lines = self.generate_global_hatching_lines()
 
         # Find composite outline
         outline_segments = self.find_composite_outline()
@@ -564,21 +612,23 @@ class HatchingGenerator:
 # Usage example
 if __name__ == "__main__":
     # Create the generator
-    generator = HatchingGenerator(width=1200, height=1800, num_shapes=40)
+    generator = HatchingGenerator(width=1000, height=1400, num_shapes=40)
 
     # Optionally use a fixed scenario for debugging
-    # generator.create_fixed_shape_scenario()
+    generator.create_fixed_shape_scenario()
 
     # Visualize shapes with color labels
     generator.visualize(show_hatching=False)
 
-    # Visualize effective color regions
-    generator.visualize_color_regions()
+    # Visualize unified color regions (instead of effective regions)
+    generator.visualize_unified_color_regions()
 
-    # Visualize with hatching lines
+    # Visualize with continuous hatching lines
     generator.visualize(show_hatching=True)
 
     # Export SVG to downloads folder
     downloads_path = os.path.expanduser("~/Downloads")
-    svg_file = generator.export_svg(os.path.join(downloads_path, "hatching.svg"))
+    svg_file = generator.export_svg(
+        os.path.join(downloads_path, "continuous_hatching.svg")
+    )
     print(f"SVG exported to: {svg_file}")
