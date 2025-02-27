@@ -101,6 +101,34 @@ class HatchingGenerator:
 
         # Define hatching patterns
         self.hatching_patterns = [
+            # cooler ones
+            {
+                "angles": [45],
+                "spacing": 4,
+                "style": "regular",  # Default style - evenly spaced lines
+            },
+            {
+                "angles": [0],
+                "spacing": 2,
+                "style": "exponential",
+                "exp_factor": 1.1,  # Each gap is 1.5x larger than the previous
+            },
+            {
+                "angles": [30],
+                "spacing": 6,
+                "style": "wavy",
+                "wave_amplitude": 5,
+                "wave_frequency": 0.1,
+                "num_points": 20,  # More points = smoother waves
+            },
+            {
+                "angles": [60],
+                "spacing": 8,
+                "style": "noisy",
+                "noise_scale": 0.1,
+                "noise_amplitude": 10,
+                "num_points": 15,  # More points = more detailed noise
+            },
             {"angles": [0], "spacing": 6},  # Pattern 0: Horizontal
             {"angles": [-15], "spacing": 6},  # Pattern 1: 15°
             {"angles": [30], "spacing": 6},  # Pattern 2: 30°
@@ -276,8 +304,8 @@ class HatchingGenerator:
 
         return shape_regions
 
-    def generate_global_hatching_lines(self):
-        """Generate hatching lines based on unified color regions"""
+    def generate_global_hatching_lines_enhanced(self):
+        """Generate hatching lines with advanced styles: exponential spacing, wavy, or noisy"""
         hatching_lines = {}
 
         # Get unified color regions
@@ -290,6 +318,19 @@ class HatchingGenerator:
 
             # Get the hatching pattern for this color
             pattern = self.hatching_patterns[color_idx % len(self.hatching_patterns)]
+
+            # Get style information - add these to your pattern dictionaries
+            style = pattern.get(
+                "style", "regular"
+            )  # Options: "regular", "exponential", "wavy", "noisy"
+            exp_factor = pattern.get("exp_factor", 1.5)  # For exponential spacing
+            wave_amplitude = pattern.get("wave_amplitude", 5)  # For wavy lines
+            wave_frequency = pattern.get("wave_frequency", 0.1)  # For wavy lines
+            noise_scale = pattern.get("noise_scale", 0.1)  # For noisy lines
+            noise_amplitude = pattern.get("noise_amplitude", 10)  # For noisy lines
+            num_points = pattern.get(
+                "num_points", 10
+            )  # Number of points for wavy/noisy lines
 
             try:
                 # Calculate a bounding box for the region
@@ -320,30 +361,128 @@ class HatchingGenerator:
                     center_x = (minx + maxx) / 2
                     center_y = (miny + maxy) / 2
 
-                    # Calculate number of lines needed
-                    spacing = pattern["spacing"]
-                    num_lines = math.ceil(diagonal_length / spacing) * 2
-                    start_offset = -diagonal_length / 2
+                    # Calculate base spacing and number of lines based on style
+                    base_spacing = pattern["spacing"]
+
+                    if style == "regular":
+                        # Regular evenly-spaced lines
+                        spacings = [
+                            base_spacing * i
+                            for i in range(
+                                math.ceil(diagonal_length / base_spacing) * 2
+                            )
+                        ]
+                        start_offset = -diagonal_length / 2
+
+                    elif style == "exponential":
+                        # Exponentially increasing spaces between lines
+                        spacings = []
+                        curr_spacing = base_spacing
+                        total_spacing = 0
+
+                        while total_spacing < diagonal_length * 2:
+                            spacings.append(total_spacing)
+                            curr_spacing *= exp_factor
+                            total_spacing += curr_spacing
+
+                        # Add negative spacings for the other side
+                        neg_spacings = [-s for s in reversed(spacings) if s > 0]
+                        spacings = neg_spacings + spacings
+                        start_offset = 0
+
+                    else:  # For wavy and noisy, use regular spacing but modify the lines
+                        spacings = [
+                            base_spacing * i
+                            for i in range(
+                                math.ceil(diagonal_length / base_spacing) * 2
+                            )
+                        ]
+                        start_offset = -diagonal_length / 2
 
                     # Direction vector
                     dir_x = math.cos(angle_rad)
                     dir_y = math.sin(angle_rad)
 
-                    # Generate hatching lines spanning the entire canvas
-                    for i in range(num_lines):
-                        offset = start_offset + i * spacing
+                    # Generate hatching lines
+                    for spacing in spacings:
+                        offset = start_offset + spacing
 
                         # Calculate offset point
                         offset_x = perp_x * offset
                         offset_y = perp_y * offset
 
-                        # Create a very long line
-                        start_x = center_x + offset_x - dir_x * diagonal_length
-                        start_y = center_y + offset_y - dir_y * diagonal_length
-                        end_x = center_x + offset_x + dir_x * diagonal_length
-                        end_y = center_y + offset_y + dir_y * diagonal_length
+                        if style in ["regular", "exponential"]:
+                            # Create a straight line
+                            start_x = center_x + offset_x - dir_x * diagonal_length
+                            start_y = center_y + offset_y - dir_y * diagonal_length
+                            end_x = center_x + offset_x + dir_x * diagonal_length
+                            end_y = center_y + offset_y + dir_y * diagonal_length
 
-                        hatch_line = LineString([(start_x, start_y), (end_x, end_y)])
+                            hatch_line = LineString(
+                                [(start_x, start_y), (end_x, end_y)]
+                            )
+
+                        elif style == "wavy":
+                            # Create a wavy line with sine wave
+                            points = []
+                            for i in range(num_points + 1):
+                                t = i / num_points
+                                # Base point along the line
+                                x = (
+                                    center_x
+                                    + offset_x
+                                    + dir_x * (2 * t - 1) * diagonal_length
+                                )
+                                y = (
+                                    center_y
+                                    + offset_y
+                                    + dir_y * (2 * t - 1) * diagonal_length
+                                )
+
+                                # Add wave perpendicular to the line direction
+                                wave = (
+                                    math.sin(
+                                        t * math.pi * 2 * wave_frequency * num_points
+                                    )
+                                    * wave_amplitude
+                                )
+                                x += -perp_x * wave
+                                y += -perp_y * wave
+
+                                points.append((x, y))
+
+                            hatch_line = LineString(points)
+
+                        elif style == "noisy":
+                            # Create a noisy line with Perlin-like noise
+                            import random  # Make sure to import this
+
+                            points = []
+                            for i in range(num_points + 1):
+                                t = i / num_points
+                                # Base point along the line
+                                x = (
+                                    center_x
+                                    + offset_x
+                                    + dir_x * (2 * t - 1) * diagonal_length
+                                )
+                                y = (
+                                    center_y
+                                    + offset_y
+                                    + dir_y * (2 * t - 1) * diagonal_length
+                                )
+
+                                # Add noise perpendicular to the line direction
+                                # Use a simple random noise as a replacement for Perlin noise
+                                noise = (random.random() * 2 - 1) * noise_amplitude
+                                noise *= noise_scale * diagonal_length
+
+                                x += -perp_x * noise
+                                y += -perp_y * noise
+
+                                points.append((x, y))
+
+                            hatch_line = LineString(points)
 
                         # Clip line to the region
                         try:
@@ -454,6 +593,22 @@ class HatchingGenerator:
                             ]
                         )
 
+                        # Add interior boundaries (holes)
+                        for interior in poly.interiors:
+                            interior_coords = list(interior.coords)
+                            segments.extend(
+                                [
+                                    (
+                                        (interior_coords[i][0], interior_coords[i][1]),
+                                        (
+                                            interior_coords[i + 1][0],
+                                            interior_coords[i + 1][1],
+                                        ),
+                                    )
+                                    for i in range(len(interior_coords) - 1)
+                                ]
+                            )
+
             return segments
 
         except Exception as e:
@@ -486,7 +641,7 @@ class HatchingGenerator:
 
         if show_hatching:
             # Calculate hatching lines using the new global method
-            hatching_lines = self.generate_global_hatching_lines()
+            hatching_lines = self.generate_global_hatching_lines_enhanced()
 
             # Draw hatching lines
             for color_idx, lines in hatching_lines.items():
@@ -590,7 +745,7 @@ class HatchingGenerator:
             filename = f"plotter_hatching_{timestamp}.svg"
 
         # Calculate global hatching lines
-        hatching_lines = self.generate_global_hatching_lines()
+        hatching_lines = self.generate_global_hatching_lines_enhanced()
 
         # Find composite outline
         outline_segments = self.find_composite_outline()
@@ -700,7 +855,7 @@ class InteractiveHatchingApp:
 
         if self.show_hatching:
             # Calculate hatching lines using the global method
-            hatching_lines = self.generator.generate_global_hatching_lines()
+            hatching_lines = self.generator.generate_global_hatching_lines_enhanced()
 
             # Draw hatching lines
             for color_idx, lines in hatching_lines.items():
@@ -790,6 +945,7 @@ class InteractiveHatchingApp:
         elif event.key == "h":  # Toggle hatching
             self.show_hatching = not self.show_hatching
             self.update_plot()
+
         elif event.key == "c":  # Toggle colors
             self.show_colors = not self.show_colors
             self.update_plot()
