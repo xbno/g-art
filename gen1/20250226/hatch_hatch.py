@@ -127,46 +127,69 @@ class HatchingGenerator:
         # Assign colors to shapes
         self._assign_colors()
 
-    def _generate_random_shapes(self, count):
+    def _generate_random_shapes(self, count, padding=50):
         shapes = []
-        padding = 50
 
-        for i in range(count):
-            x = random.uniform(padding, self.width - padding)
-            y = random.uniform(padding, self.height - padding)
-            shape_type = random.choice(["circle", "square", "triangle"])
+        # Calculate grid dimensions
+        grid_size = 200  # Base size for grid cells
+        cols = (self.width - 2 * padding) // grid_size
+        rows = (self.height - 2 * padding) // grid_size
 
-            if shape_type == "circle":
-                diameter = random.uniform(50, 240)
-                if (
-                    x - diameter / 2 >= padding
-                    and x + diameter / 2 <= self.width - padding
-                    and y - diameter / 2 >= padding
-                    and y + diameter / 2 <= self.height - padding
-                ):
-                    shapes.append(Shape("circle", x, y, diameter, 0, i))
+        # Size multipliers
+        size_multipliers = [1, 1, 1, 2, 2, 3]  # More 1s, fewer 2s, fewest 3s
 
-            elif shape_type == "square":
-                size = random.uniform(50, 400)
-                if (
-                    x - size / 2 >= padding
-                    and x + size / 2 <= self.width - padding
-                    and y - size / 2 >= padding
-                    and y + size / 2 <= self.height - padding
-                ):
-                    shapes.append(Shape("square", x, y, size, 0, i))
+        shape_types = ["circle", "square", "triangle"]
+        shape_count = 0
 
-            else:  # triangle
-                size = random.uniform(25, 400)
-                rotation = random.randint(0, 3) * (math.pi / 2)
-                # Simple check if triangle fits within bounds
-                if (
-                    x - size >= padding
-                    and x + size <= self.width - padding
-                    and y - size >= padding
-                    and y + size <= self.height - padding
-                ):
-                    shapes.append(Shape("triangle", x, y, size, 0, i, rotation))
+        for row in range(int(rows)):
+            for col in range(int(cols)):
+                if shape_count >= count:
+                    break
+
+                # Calculate center position for this grid cell
+                x = padding + (col + 0.5) * grid_size
+                y = padding + (row + 0.5) * grid_size
+
+                # Choose random shape type and size multiplier
+                shape_type = random.choice(shape_types)
+                size_mult = random.choice(size_multipliers)
+                base_size = grid_size * 0.8  # 80% of grid size
+
+                if shape_type == "circle":
+                    diameter = base_size * size_mult
+                    if (
+                        x - diameter / 2 >= padding
+                        and x + diameter / 2 <= self.width - padding
+                        and y - diameter / 2 >= padding
+                        and y + diameter / 2 <= self.height - padding
+                    ):
+                        shapes.append(Shape("circle", x, y, diameter, 0, shape_count))
+                        shape_count += 1
+
+                elif shape_type == "square":
+                    size = base_size * size_mult
+                    if (
+                        x - size / 2 >= padding
+                        and x + size / 2 <= self.width - padding
+                        and y - size / 2 >= padding
+                        and y + size / 2 <= self.height - padding
+                    ):
+                        shapes.append(Shape("square", x, y, size, 0, shape_count))
+                        shape_count += 1
+
+                else:  # triangle
+                    size = base_size * size_mult
+                    rotation = random.randint(0, 3) * (math.pi / 2)
+                    if (
+                        x - size >= padding
+                        and x + size <= self.width - padding
+                        and y - size >= padding
+                        and y + size <= self.height - padding
+                    ):
+                        shapes.append(
+                            Shape("triangle", x, y, size, 0, shape_count, rotation)
+                        )
+                        shape_count += 1
 
         return shapes
 
@@ -609,26 +632,182 @@ class HatchingGenerator:
         return filename
 
 
+class InteractiveHatchingApp:
+    def __init__(self, width=1200, height=1800, num_shapes=40, figsize=(6, 10)):
+        self.width = width
+        self.height = height
+        self.num_shapes = num_shapes
+        self.generator = None
+        self.fig = None
+        self.ax = None
+        self.show_hatching = True
+        self.fixed_scenario = False
+        self.figsize = figsize
+
+        # Create initial generator
+        self.regenerate()
+
+        # Create the figure
+        self.setup_figure()
+
+    def regenerate(self):
+        """Generate a new composition"""
+        self.generator = HatchingGenerator(self.width, self.height, self.num_shapes)
+        if self.fixed_scenario:
+            self.generator.create_fixed_shape_scenario()
+
+    def setup_figure(self):
+        """Set up the Matplotlib figure and connect event handlers"""
+        self.fig, self.ax = plt.subplots(figsize=self.figsize)
+
+        # Connect event handlers
+        self.fig.canvas.mpl_connect("key_press_event", self.on_key_press)
+
+        # Set figure title with instructions
+        self.fig.suptitle(
+            "Interactive Hatching Generator\n"
+            "Press SPACE to generate a new design\n"
+            "Press V to save as SVG\n"
+            "Press H to toggle hatching\n"
+            "Press F to toggle fixed/random scenario\n"
+            "Press Q to quit",
+            fontsize=14,
+        )
+
+        # Initial drawing
+        self.update_plot()
+
+    def update_plot(self):
+        """Update the plot with current generator data"""
+        self.ax.clear()
+        self.ax.set_xlim(0, self.width)
+        self.ax.set_ylim(0, self.height)
+
+        # Draw filled shapes
+        for shape in self.generator.shapes:
+            color = self.generator.colors[
+                shape.color_index % len(self.generator.colors)
+            ]
+            patch = shape.get_matplotlib_patch(color)
+            self.ax.add_patch(patch)
+
+        # Calculate and draw the composite outline
+        outline_segments = self.generator.find_composite_outline()
+        outline_collection = LineCollection(
+            outline_segments, colors="black", linewidths=2
+        )
+        self.ax.add_collection(outline_collection)
+
+        if self.show_hatching:
+            # Calculate hatching lines using the global method
+            hatching_lines = self.generator.generate_global_hatching_lines()
+
+            # Draw hatching lines
+            for color_idx, lines in hatching_lines.items():
+                line_collection = LineCollection(lines, colors="black", linewidths=0.1)
+                self.ax.add_collection(line_collection)
+
+        # Add debug text for each shape (optional)
+        for shape in self.generator.shapes:
+            self.ax.text(
+                shape.x,
+                shape.y,
+                f"C{shape.color_index}",
+                ha="center",
+                va="center",
+                fontsize=12,
+                color="white",
+                fontweight="bold",
+            )
+
+        self.ax.set_aspect("equal")
+        self.ax.axis("off")
+
+        # Add status info
+        status_text = f"Mode: {'Fixed' if self.fixed_scenario else 'Random'}, "
+        status_text += f"Hatching: {'On' if self.show_hatching else 'Off'}, "
+        status_text += f"Shapes: {len(self.generator.shapes)}"
+        self.ax.text(
+            self.width // 2,
+            30,
+            status_text,
+            ha="center",
+            va="center",
+            fontsize=14,
+            color="black",
+            bbox=dict(facecolor="white", alpha=0.8),
+        )
+
+        self.fig.tight_layout()
+        plt.draw()
+
+    def save_svg(self):
+        """Save the current design as an SVG file"""
+        downloads_path = os.path.expanduser("~/Downloads")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(downloads_path, f"hatching_{timestamp}.svg")
+
+        saved_file = self.generator.export_svg(filename)
+
+        # Show a message on the plot
+        self.ax.text(
+            self.width // 2,
+            self.height - 30,
+            f"Saved to: {os.path.basename(saved_file)}",
+            ha="center",
+            va="center",
+            fontsize=14,
+            color="black",
+            bbox=dict(facecolor="white", alpha=0.8),
+        )
+        plt.draw()
+
+        # Clear the message after 2 seconds
+        def clear_message():
+            self.update_plot()
+
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+        # Schedule message clearing - note: this won't work in non-interactive mode
+        try:
+            timer = self.fig.canvas.new_timer(interval=2000)
+            timer.add_callback(clear_message)
+            timer.start()
+        except:
+            # If timer doesn't work, just update the plot
+            self.update_plot()
+
+    def on_key_press(self, event):
+        """Handle key press events"""
+        if event.key == " ":  # Spacebar
+            self.regenerate()
+            self.update_plot()
+
+        elif event.key == "v":  # Save
+            self.save_svg()
+
+        elif event.key == "h":  # Toggle hatching
+            self.show_hatching = not self.show_hatching
+            self.update_plot()
+        elif event.key == "c":  # Toggle colors
+            self.show_colors = not self.show_colors
+            self.update_plot()
+
+        elif event.key == "f":  # Toggle fixed/random scenario
+            self.fixed_scenario = not self.fixed_scenario
+            self.regenerate()
+            self.update_plot()
+
+        elif event.key == "q":  # Quit
+            plt.close(self.fig)
+
+    def run(self):
+        """Run the application"""
+        plt.show()
+
+
 # Usage example
 if __name__ == "__main__":
-    # Create the generator
-    generator = HatchingGenerator(width=1000, height=1400, num_shapes=50)
-
-    # Optionally use a fixed scenario for debugging
-    # generator.create_fixed_shape_scenario()
-
-    # Visualize shapes with color labels
-    generator.visualize(show_hatching=False)
-
-    # Visualize unified color regions (instead of effective regions)
-    generator.visualize_unified_color_regions()
-
-    # Visualize with continuous hatching lines
-    generator.visualize(show_hatching=True)
-
-    # Export SVG to downloads folder
-    downloads_path = os.path.expanduser("~/Downloads")
-    svg_file = generator.export_svg(
-        os.path.join(downloads_path, "continuous_hatching.svg")
-    )
-    print(f"SVG exported to: {svg_file}")
+    app = InteractiveHatchingApp(width=1200, height=1800, num_shapes=40)
+    app.run()
