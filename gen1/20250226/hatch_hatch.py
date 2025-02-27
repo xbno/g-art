@@ -374,6 +374,21 @@ class HatchingGenerator:
                             for i in range(len(exterior_coords) - 1)
                         ]
                     )
+                    # Add interior boundaries (holes)
+                    for interior in poly.interiors:
+                        interior_coords = list(interior.coords)
+                        segments.extend(
+                            [
+                                (
+                                    (interior_coords[i][0], interior_coords[i][1]),
+                                    (
+                                        interior_coords[i + 1][0],
+                                        interior_coords[i + 1][1],
+                                    ),
+                                )
+                                for i in range(len(interior_coords) - 1)
+                            ]
+                        )
 
             return segments
 
