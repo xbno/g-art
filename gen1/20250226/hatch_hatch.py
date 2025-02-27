@@ -91,7 +91,7 @@ class Shape:
 
 
 class HatchingGenerator:
-    def __init__(self, width=1200, height=1800, num_shapes=20):
+    def __init__(self, width=1200, height=1800, num_shapes=40):
         self.width = width
         self.height = height
         self.shapes = self._generate_random_shapes(num_shapes)
@@ -549,7 +549,7 @@ class HatchingGenerator:
 # Usage example
 if __name__ == "__main__":
     # Create the generator
-    generator = HatchingGenerator(width=1200, height=1800, num_shapes=15)
+    generator = HatchingGenerator(width=1200, height=1800, num_shapes=40)
 
     # Optionally use a fixed scenario for debugging
     # generator.create_fixed_shape_scenario()
@@ -563,6 +563,7 @@ if __name__ == "__main__":
     # Visualize with hatching lines
     generator.visualize(show_hatching=True)
 
-    # Export SVG
-    svg_file = generator.export_svg()
+    # Export SVG to downloads folder
+    downloads_path = os.path.expanduser("~/Downloads")
+    svg_file = generator.export_svg(os.path.join(downloads_path, "hatching.svg"))
     print(f"SVG exported to: {svg_file}")
