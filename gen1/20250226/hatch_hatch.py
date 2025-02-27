@@ -91,7 +91,7 @@ class Shape:
 
 
 class HatchingGenerator:
-    def __init__(self, width=1200, height=1800, num_shapes=40):
+    def __init__(self, width=500, height=500, num_shapes=40):
         self.width = width
         self.height = height
         self.shapes = self._generate_random_shapes(num_shapes)
@@ -101,25 +101,25 @@ class HatchingGenerator:
 
         # Define hatching patterns
         self.hatching_patterns = [
-            {"angles": [0], "spacing": 12},  # Pattern 0: Horizontal
-            {"angles": [15], "spacing": 12},  # Pattern 1: 15°
-            {"angles": [30], "spacing": 12},  # Pattern 2: 30°
-            {"angles": [45], "spacing": 12},  # Pattern 3: 45°
-            {"angles": [60], "spacing": 12},  # Pattern 4: 60°
-            {"angles": [75], "spacing": 12},  # Pattern 5: 75°
-            {"angles": [90], "spacing": 12},  # Pattern 6: Vertical
+            {"angles": [0], "spacing": 6},  # Pattern 0: Horizontal
+            {"angles": [-15], "spacing": 6},  # Pattern 1: 15°
+            {"angles": [30], "spacing": 6},  # Pattern 2: 30°
+            {"angles": [-45], "spacing": 6},  # Pattern 3: 45°
+            {"angles": [60], "spacing": 6},  # Pattern 4: 60°
+            {"angles": [-75], "spacing": 6},  # Pattern 5: 75°
+            {"angles": [90], "spacing": 6},  # Pattern 6: Vertical
             # Perpendicular pairs
-            {"angles": [0, 90], "spacing": 12},  # Pattern 7: Grid
-            {"angles": [15, 105], "spacing": 12},  # Pattern 8: 15°/105° grid
-            {"angles": [30, 120], "spacing": 12},  # Pattern 9: 30°/120° grid
+            {"angles": [0, 90], "spacing": 6},  # Pattern 7: Grid
+            {"angles": [15, 105], "spacing": 6},  # Pattern 8: 15°/105° grid
+            {"angles": [30, 120], "spacing": 6},  # Pattern 9: 30°/120° grid
             {
                 "angles": [45, 135],
-                "spacing": 12,
+                "spacing": 6,
             },  # Pattern 10: 45°/135° grid (diagonal crosshatch)
             # More random combinations
-            {"angles": [0, 45], "spacing": 12},  # Pattern 11
-            {"angles": [30, 75], "spacing": 12},  # Pattern 12
-            {"angles": [15, 60], "spacing": 12},  # Pattern 13
+            {"angles": [0, 45], "spacing": 6},  # Pattern 11
+            {"angles": [30, 75], "spacing": 6},  # Pattern 12
+            {"angles": [15, 60], "spacing": 6},  # Pattern 13
             {"angles": [0, 30, 60, 90], "spacing": 20},  # Pattern 14
             {"angles": [15, 45, 75], "spacing": 18},  # Pattern 15
         ]
@@ -442,9 +442,9 @@ class HatchingGenerator:
                 segments.extend(shape.get_outline_segments())
             return segments
 
-    def visualize(self, show_hatching=False):
+    def visualize(self, show_hatching=False, figsize=(6, 10)):
         """Visualize the shapes and optionally the hatching patterns"""
-        fig, ax = plt.subplots(figsize=(12, 18))
+        fig, ax = plt.subplots(figsize=figsize)
         ax.set_xlim(0, self.width)
         ax.set_ylim(0, self.height)
 
@@ -488,9 +488,9 @@ class HatchingGenerator:
         plt.tight_layout()
         plt.show()
 
-    def visualize_unified_color_regions(self):
+    def visualize_unified_color_regions(self, figsize=(6, 10)):
         """Visualize the unified regions for each color"""
-        fig, ax = plt.subplots(figsize=(12, 18))
+        fig, ax = plt.subplots(figsize=figsize)
         ax.set_xlim(0, self.width)
         ax.set_ylim(0, self.height)
 
@@ -560,7 +560,7 @@ class HatchingGenerator:
         plt.tight_layout()
         plt.show()
 
-    def export_svg(self, filename=None):
+    def export_svg(self, filename=None, figsize=(6, 10)):
         """Export the design as an SVG file"""
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -612,10 +612,10 @@ class HatchingGenerator:
 # Usage example
 if __name__ == "__main__":
     # Create the generator
-    generator = HatchingGenerator(width=1000, height=1400, num_shapes=40)
+    generator = HatchingGenerator(width=1000, height=1400, num_shapes=50)
 
     # Optionally use a fixed scenario for debugging
-    generator.create_fixed_shape_scenario()
+    # generator.create_fixed_shape_scenario()
 
     # Visualize shapes with color labels
     generator.visualize(show_hatching=False)
