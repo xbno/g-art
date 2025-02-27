@@ -1,0 +1,6 @@
+torch
+pillow
+svgwrite
+numpy
+matplotlib
+shapely

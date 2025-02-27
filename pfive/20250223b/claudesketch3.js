@@ -93,9 +93,165 @@ function setup() {
     }
 }
 
+// Improved function to draw bounding boxes around shapes of the same color
+function drawColorBoundingBoxes() {
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // For each color group, calculate and draw a bounding box
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color
+        const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Calculate a bounding box for all shapes with this color
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        for (const shape of shapesWithColor) {
+            const bbox = getShapeBoundingBox(shape);
+            minX = min(minX, bbox.x);
+            minY = min(minY, bbox.y);
+            maxX = max(maxX, bbox.x + bbox.width);
+            maxY = max(maxY, bbox.y + bbox.height);
+        }
+
+        // Draw the bounding box as a dotted red rectangle
+        push(); // Save current style settings
+        stroke(255, 0, 0); // Red outline
+        strokeWeight(3);
+        noFill();
+        drawingContext.setLineDash([8, 8]); // More visible dotted pattern
+        rect(minX, minY, maxX - minX, maxY - minY);
+        drawingContext.setLineDash([]); // Reset dash pattern
+
+        // Add a label with the color index
+        noStroke();
+        fill(255, 0, 0);
+        textSize(24); // Larger text
+        textAlign(LEFT, TOP);
+        text(`Color ${colorIndex}`, minX + 10, minY + 10);
+        pop(); // Restore previous style settings
+    }
+}
+
+// Function to highlight all shapes of the same color
+function highlightColorGroups() {
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // For each color group
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color
+        const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Draw a semi-transparent highlight over these shapes
+        push(); // Save current style settings
+        noStroke();
+
+        // Choose a highlight color based on colorIndex
+        const highlightColors = [
+            color(255, 0, 0, 50),   // Red with 50 alpha
+            color(0, 255, 0, 50),   // Green with 50 alpha
+            color(0, 0, 255, 50),   // Blue with 50 alpha
+            color(255, 255, 0, 50), // Yellow with 50 alpha
+            color(255, 0, 255, 50)  // Magenta with 50 alpha
+        ];
+
+        fill(highlightColors[colorIndex % highlightColors.length]);
+
+        // Draw each shape with this color
+        for (const shape of shapesWithColor) {
+            if (shape.type === 'circle') {
+                ellipse(shape.x, shape.y, shape.size);
+            } else if (shape.type === 'square') {
+                rectMode(CENTER);
+                rect(shape.x, shape.y, shape.size, shape.size);
+            } else if (shape.type === 'triangle') {
+                const points = getShapePoints(shape);
+                beginShape();
+                for (const p of points) {
+                    vertex(p.x, p.y);
+                }
+                endShape(CLOSE);
+            }
+        }
+
+        // Add a label in the center of the first shape
+        if (shapesWithColor.length > 0) {
+            const firstShape = shapesWithColor[0];
+            fill(255, 0, 0);
+            stroke(255);
+            strokeWeight(2);
+            textSize(24);
+            textAlign(CENTER, CENTER);
+            text(`Color ${colorIndex}`, firstShape.x, firstShape.y);
+        }
+
+        pop(); // Restore previous style settings
+    }
+}
+
+// Alternative approach - draw outline around all shapes of each color
+function outlineColorGroups() {
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    push(); // Save current drawing settings
+
+    // For each color group
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color
+        const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Set styling for this color group's outline
+        stroke(255, 0, 0); // Red outline
+        strokeWeight(3);
+        noFill();
+        drawingContext.setLineDash([5, 5]); // Dotted line
+
+        // Draw outline for each shape in this color group
+        for (const shape of shapesWithColor) {
+            if (shape.type === 'circle') {
+                ellipse(shape.x, shape.y, shape.size);
+            } else if (shape.type === 'square') {
+                rectMode(CENTER);
+                rect(shape.x, shape.y, shape.size, shape.size);
+            } else if (shape.type === 'triangle') {
+                const points = getShapePoints(shape);
+                beginShape();
+                for (const p of points) {
+                    vertex(p.x, p.y);
+                }
+                endShape(CLOSE);
+            }
+
+            // Add a label
+            push();
+            noStroke();
+            fill(255, 0, 0);
+            textSize(18);
+            textAlign(CENTER, CENTER);
+            text(`Color ${colorIndex}`, shape.x, shape.y);
+            pop();
+        }
+    }
+
+    // Reset line dash and restore drawing settings
+    drawingContext.setLineDash([]);
+    pop();
+}
+
 function draw() {
-    // Step 1: Draw fills without stroke
-    noStroke();
+    // Clear the canvas
+    background(255);
+
+    // Process shape colors
     let colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"]; // Pleasant color palette
 
     // Assign a specific color to each shape for consistency
@@ -104,36 +260,11 @@ function draw() {
         shapes[i].colorIndex = i % colors.length; // Store color index for hatching pattern
     }
 
-    // Draw all shapes
-    for (let shape of shapes) {
-        fill(shape.fillColor);
-        drawShapeFill(shape);
-    }
+    // Use the more advanced visualization that shows precise non-overlapping areas
+    extractEffectiveHatchingAreas();
 
-    // Reset blend mode
-    blendMode(BLEND);
-
-    // Step 2: Get all outline segments
-    let allSegments = [];
-    for (let shape of shapes) {
-        let segments = getOutlineSegments(shape);
-        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
-    }
-
-    // Step 3: Split segments at intersections
-    let splitSegments = splitSegmentsAtIntersections(allSegments);
-
-    // Step 4: Filter out inner segments
-    let outerSegments = filterOuterSegments(splitSegments);
-
-    // Step 5: Draw bold outlines
-    stroke(0);
-    strokeWeight(10);
-    for (let seg of outerSegments) {
-        line(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
-    }
-
-    noLoop(); // Static sketch
+    // No need to loop since this is a static visualization
+    noLoop();
 }
 
 // Draw the fill of a shape
@@ -556,4 +687,545 @@ function keyPressed() {
 
         console.log(`Plotter-optimized SVG saved!`);
     }
+}
+
+// Function to draw bounding boxes around shapes of the same color
+function drawColorBoundingBoxes() {
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // Set drawing style for bounding boxes
+    stroke(255, 0, 0); // Red outline
+    strokeWeight(2);
+    noFill();
+
+    // For each color group, calculate and draw a bounding box
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color
+        const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Calculate a bounding box for all shapes with this color
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        for (const shape of shapesWithColor) {
+            const bbox = getShapeBoundingBox(shape);
+            minX = Math.min(minX, bbox.x);
+            minY = Math.min(minY, bbox.y);
+            maxX = Math.max(maxX, bbox.x + bbox.width);
+            maxY = Math.max(maxY, bbox.y + bbox.height);
+        }
+
+        // Draw the bounding box as a dotted red rectangle
+        drawingContext.setLineDash([5, 5]); // Set dotted line pattern
+        rect(minX, minY, maxX - minX, maxY - minY);
+
+        // Add a label with the color index
+        noStroke();
+        fill(255, 0, 0);
+        textSize(16);
+        text(`Color ${colorIndex}`, minX + 5, minY + 15);
+    }
+
+    // Reset line dash to solid for other drawings
+    drawingContext.setLineDash([]);
+}
+
+// Function to draw more precise polygons around shapes of the same color
+function drawColorPolygons() {
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // Set drawing style
+    stroke(255, 0, 0); // Red outline
+    strokeWeight(2);
+    noFill();
+
+    // For each color group, find the outlines
+    for (const colorIndex of colorIndices) {
+        // Get all shapes with this color
+        const shapesWithColor = shapes.filter(shape => shape.colorIndex === colorIndex);
+
+        if (shapesWithColor.length === 0) continue;
+
+        // Get all segments for these shapes
+        let allSegments = [];
+        for (let shape of shapesWithColor) {
+            let segments = getOutlineSegments(shape);
+            allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+        }
+
+        // Set dotted line style
+        drawingContext.setLineDash([5, 5]);
+
+        // Draw all segments
+        for (let seg of allSegments) {
+            line(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+        }
+
+        // Reset line dash
+        drawingContext.setLineDash([]);
+
+        // Add a label near the first shape
+        if (shapesWithColor.length > 0) {
+            const firstShape = shapesWithColor[0];
+            noStroke();
+            fill(255, 0, 0);
+            textSize(16);
+            text(`Color ${colorIndex}`, firstShape.x, firstShape.y);
+        }
+    }
+}
+
+// Function to visualize the actual non-overlapping areas for each color
+function visualizeNonOverlappingColorAreas() {
+    // Sort shapes by z-index (back to front)
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // Create a canvas mask for each color
+    const colorMasks = {};
+    const colorIndices = [...new Set(shapes.map(s => s.colorIndex))];
+
+    // Initialize a mask for each color
+    for (const colorIndex of colorIndices) {
+        colorMasks[colorIndex] = createGraphics(width, height);
+        colorMasks[colorIndex].background(0, 0); // Transparent background
+    }
+
+    // Process shapes in z-index order
+    for (const shape of sortedShapes) {
+        const colorIndex = shape.colorIndex;
+        const mask = colorMasks[colorIndex];
+
+        // Set color to identify this area
+        mask.fill(255);
+        mask.noStroke();
+
+        // Draw this shape on its color mask
+        const points = getShapePoints(shape);
+        mask.beginShape();
+        for (const p of points) {
+            mask.vertex(p.x, p.y);
+        }
+        mask.endShape(CLOSE);
+
+        // Erase this shape from all colors with lower z-index
+        for (const otherColorIndex of colorIndices) {
+            if (otherColorIndex !== colorIndex) {
+                const otherShapes = shapes.filter(s => s.colorIndex === otherColorIndex);
+
+                // Check if we need to erase
+                const needsErase = otherShapes.some(s => s.zIndex < shape.zIndex);
+
+                if (needsErase) {
+                    const otherMask = colorMasks[otherColorIndex];
+                    otherMask.erase();
+                    otherMask.beginShape();
+                    for (const p of points) {
+                        otherMask.vertex(p.x, p.y);
+                    }
+                    otherMask.endShape(CLOSE);
+                    otherMask.noErase();
+                }
+            }
+        }
+    }
+
+    // Now draw all the color masks with red dotted outlines
+    for (const colorIndex of colorIndices) {
+        const mask = colorMasks[colorIndex];
+
+        // Get the mask's pixels to find the contour
+        mask.loadPixels();
+
+        // Draw the mask as a semi-transparent overlay
+        push();
+        image(mask, 0, 0);
+        pop();
+
+        // Find blob contours and draw them
+        push();
+        stroke(255, 0, 0);
+        strokeWeight(3);
+        drawingContext.setLineDash([8, 8]);
+        noFill();
+
+        // Draw the edges of the mask
+        // This is simplified - ideally we'd extract contours from the mask
+        // but we'll simulate by tracing all non-transparent pixels
+
+        // Add label for this color group
+        const shapesInColor = shapes.filter(s => s.colorIndex === colorIndex);
+        if (shapesInColor.length > 0) {
+            // Find center of first shape as a place to put the label
+            const shape = shapesInColor[0];
+            push();
+            noStroke();
+            fill(255, 0, 0);
+            textSize(24);
+            textAlign(CENTER, CENTER);
+            text(`Color ${colorIndex}`, shape.x, shape.y);
+            pop();
+        }
+
+        pop();
+    }
+
+    // Reset line dash
+    drawingContext.setLineDash([]);
+}
+
+// Alternative approach using simplified polygon visualization
+function drawClippedColorAreas() {
+    // Sort shapes by z-index
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // Create a buffer for processing
+    const buffer = createGraphics(width, height);
+
+    // For each color, calculate its visible area
+    const colorIndices = [...new Set(shapes.map(s => s.colorIndex))];
+
+    for (const colorIndex of colorIndices) {
+        // Clear the buffer
+        buffer.clear();
+        buffer.background(0, 0); // Transparent
+
+        // Find all shapes of this color
+        const shapesWithColor = shapes.filter(s => s.colorIndex === colorIndex);
+
+        // Draw all shapes of this color to the buffer
+        buffer.fill(255);
+        buffer.noStroke();
+
+        for (const shape of shapesWithColor) {
+            const points = getShapePoints(shape);
+            buffer.beginShape();
+            for (const p of points) {
+                buffer.vertex(p.x, p.y);
+            }
+            buffer.endShape(CLOSE);
+        }
+
+        // Now erase any parts covered by higher z-index shapes
+        buffer.erase();
+
+        for (const shape of sortedShapes) {
+            // If this shape has a higher z-index than any shape in our color group
+            if (!shapesWithColor.includes(shape) &&
+                shapesWithColor.some(s => shape.zIndex > s.zIndex)) {
+                const points = getShapePoints(shape);
+                buffer.beginShape();
+                for (const p of points) {
+                    buffer.vertex(p.x, p.y);
+                }
+                buffer.endShape(CLOSE);
+            }
+        }
+
+        buffer.noErase();
+
+        // Draw the resulting clipped area
+        image(buffer, 0, 0);
+
+        // Draw red dotted outlines around the visible area
+        push();
+        stroke(255, 0, 0);
+        strokeWeight(3);
+        drawingContext.setLineDash([8, 8]);
+        noFill();
+
+        // Here we would ideally trace the contour of the buffer
+        // For simplicity, let's just outline the original shapes for now
+        for (const shape of shapesWithColor) {
+            if (shape.type === 'circle') {
+                ellipse(shape.x, shape.y, shape.size);
+            } else if (shape.type === 'square') {
+                rectMode(CENTER);
+                rect(shape.x, shape.y, shape.size, shape.size);
+            } else if (shape.type === 'triangle') {
+                const points = getShapePoints(shape);
+                beginShape();
+                for (const p of points) {
+                    vertex(p.x, p.y);
+                }
+                endShape(CLOSE);
+            }
+        }
+
+        // Add a label for this color
+        if (shapesWithColor.length > 0) {
+            const firstShape = shapesWithColor[0];
+            push();
+            noStroke();
+            fill(255, 0, 0);
+            textSize(24);
+            textAlign(CENTER, CENTER);
+            text(`Color ${colorIndex}`, firstShape.x, firstShape.y);
+            pop();
+        }
+
+        pop();
+    }
+
+    // Reset line dash
+    drawingContext.setLineDash([]);
+}
+
+// Improved function to visualize all non-overlapping regions by color
+function visualizeNonOverlappingRegions() {
+    // Clear the background first to start fresh
+    background(255);
+
+    // Draw all shapes with their proper fills
+    for (let shape of shapes) {
+        fill(shape.fillColor);
+        noStroke();
+        drawShapeFill(shape);
+    }
+
+    // Draw the main black outlines
+    stroke(0);
+    strokeWeight(10);
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+    for (let seg of outerSegments) {
+        line(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+    }
+
+    // Get unique color indices
+    const colorIndices = [...new Set(shapes.map(shape => shape.colorIndex))];
+
+    // Process each color
+    for (const colorIndex of colorIndices) {
+        // Create graphics buffer for this color
+        const colorBuffer = createGraphics(width, height);
+        colorBuffer.clear();
+
+        // First, draw all shapes of this color to the buffer
+        const colorShapes = shapes.filter(s => s.colorIndex === colorIndex);
+        colorBuffer.fill(255);
+        colorBuffer.noStroke();
+
+        for (const shape of colorShapes) {
+            const points = getShapePoints(shape);
+            colorBuffer.beginShape();
+            for (const p of points) {
+                colorBuffer.vertex(p.x, p.y);
+            }
+            colorBuffer.endShape(CLOSE);
+        }
+
+        // Then erase any parts covered by higher z-index shapes
+        colorBuffer.erase();
+        for (const shape of shapes) {
+            // If this shape has higher z-index than ANY shape in our color group
+            if (colorShapes.some(cs => shape.zIndex > cs.zIndex)) {
+                const points = getShapePoints(shape);
+                colorBuffer.beginShape();
+                for (const p of points) {
+                    colorBuffer.vertex(p.x, p.y);
+                }
+                colorBuffer.endShape(CLOSE);
+            }
+        }
+        colorBuffer.noErase();
+
+        // Now trace the outline of this color's region
+        // Use a different dash pattern and color for each color index to distinguish them
+        push();
+
+        // Define different colors and dash patterns for outlines
+        const outlineColors = [
+            [255, 0, 0],    // Red
+            [0, 255, 0],    // Green
+            [0, 0, 255],    // Blue
+            [255, 128, 0],  // Orange
+            [128, 0, 255]   // Purple
+        ];
+
+        const dashPatterns = [
+            [8, 8],         // Standard dash
+            [2, 6],         // Short dash, long gap
+            [12, 4],        // Long dash, short gap
+            [8, 4, 2, 4],   // Dash-dot
+            [2, 2]          // Short dashes
+        ];
+
+        // Set style for this color's outline
+        const colorIndexMod = colorIndex % outlineColors.length;
+        stroke(outlineColors[colorIndexMod][0], outlineColors[colorIndexMod][1], outlineColors[colorIndexMod][2]);
+        strokeWeight(3);
+        drawingContext.setLineDash(dashPatterns[colorIndexMod]);
+        noFill();
+
+        // Draw border lines for the non-overlapping region
+        // (This is a simple approach - in a full implementation you'd extract the contours)
+        image(colorBuffer, 0, 0, 1, 1); // Draw 1x1 pixel to get it into the canvas
+
+        // Get a center point for the first shape of this color for label placement
+        if (colorShapes.length > 0) {
+            const firstShape = colorShapes[0];
+
+            // Handle different outline styles based on shape type
+            // For actual implementation, we'd need contour tracing or an outline shader
+            for (const shape of colorShapes) {
+                const points = getShapePoints(shape);
+                beginShape();
+                for (const p of points) {
+                    vertex(p.x, p.y);
+                }
+                endShape(CLOSE);
+            }
+
+            // Add label with the color index
+            noStroke();
+            fill(outlineColors[colorIndexMod][0], outlineColors[colorIndexMod][1], outlineColors[colorIndexMod][2]);
+            textSize(24);
+            textAlign(CENTER, CENTER);
+            text(`Color ${colorIndex}`, firstShape.x, firstShape.y);
+        }
+
+        pop();
+    }
+
+    // Reset line dash
+    drawingContext.setLineDash([]);
+}
+
+// Function to extract and visualize the actual effective hatching areas
+function extractEffectiveHatchingAreas() {
+    // Sort shapes by z-index (back to front)
+    const sortedShapes = [...shapes].sort((a, b) => a.zIndex - b.zIndex);
+
+    // Create an array of graphics buffers to hold each color's effective area
+    const colorIndices = [...new Set(shapes.map(s => s.colorIndex))];
+    const colorBuffers = {};
+
+    // Initialize a buffer for each color
+    for (const colorIndex of colorIndices) {
+        colorBuffers[colorIndex] = createGraphics(width, height);
+        colorBuffers[colorIndex].clear();
+    }
+
+    // Process shapes in z-index order (back to front)
+    for (let i = 0; i < sortedShapes.length; i++) {
+        const shape = sortedShapes[i];
+        const colorIndex = shape.colorIndex;
+        const buffer = colorBuffers[colorIndex];
+
+        // Draw this shape to its color buffer
+        buffer.fill(255);
+        buffer.noStroke();
+
+        const points = getShapePoints(shape);
+        buffer.beginShape();
+        for (const p of points) {
+            buffer.vertex(p.x, p.y);
+        }
+        buffer.endShape(CLOSE);
+
+        // Now erase this shape from all lower z-index colors' buffers
+        for (const otherShape of sortedShapes) {
+            if (otherShape.zIndex < shape.zIndex) {
+                const otherColorIndex = otherShape.colorIndex;
+                const otherBuffer = colorBuffers[otherColorIndex];
+
+                // Check if we need to erase (if point is inside both shapes)
+                // This is a simple approximation - we'd ideally check for overlap
+                otherBuffer.erase();
+                otherBuffer.beginShape();
+                for (const p of points) {
+                    otherBuffer.vertex(p.x, p.y);
+                }
+                otherBuffer.endShape(CLOSE);
+                otherBuffer.noErase();
+            }
+        }
+    }
+
+    // Draw the original shapes and outlines
+    background(255);
+
+    // Draw all shapes with their proper fills
+    for (let shape of shapes) {
+        fill(shape.fillColor);
+        noStroke();
+        drawShapeFill(shape);
+    }
+
+    // Draw the main black outlines
+    stroke(0);
+    strokeWeight(10);
+    let allSegments = [];
+    for (let shape of shapes) {
+        let segments = getOutlineSegments(shape);
+        allSegments.push(...segments.map(seg => ({ ...seg, parent: shape })));
+    }
+    let splitSegments = splitSegmentsAtIntersections(allSegments);
+    let outerSegments = filterOuterSegments(splitSegments);
+    for (let seg of outerSegments) {
+        line(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+    }
+
+    // Now outline each color's effective area with a distinct colored dotted line
+    const outlineColors = [
+        [255, 0, 0],    // Red
+        [0, 255, 0],    // Green
+        [0, 0, 255],    // Blue
+        [255, 128, 0],  // Orange
+        [128, 0, 255]   // Purple
+    ];
+
+    const dashPatterns = [
+        [8, 8],         // Standard dash
+        [2, 6],         // Short dash, long gap
+        [12, 4],        // Long dash, short gap
+        [8, 4, 2, 4],   // Dash-dot
+        [2, 2]          // Short dashes
+    ];
+
+    // Draw each color's effective hatching area
+    for (const colorIndex of colorIndices) {
+        // Get the buffer for this color
+        const buffer = colorBuffers[colorIndex];
+
+        // Set style for this color's outline
+        const colorIndexMod = colorIndex % outlineColors.length;
+        stroke(outlineColors[colorIndexMod][0], outlineColors[colorIndexMod][1], outlineColors[colorIndexMod][2]);
+        strokeWeight(3);
+        drawingContext.setLineDash(dashPatterns[colorIndexMod]);
+        noFill();
+
+        // Get the center of a shape with this color for label placement
+        const shapesWithThisColor = shapes.filter(s => s.colorIndex === colorIndex);
+        let labelX = width / 2, labelY = height / 2;
+
+        if (shapesWithThisColor.length > 0) {
+            labelX = shapesWithThisColor[0].x;
+            labelY = shapesWithThisColor[0].y;
+        }
+
+        // Draw the buffer as an image
+        image(buffer, 0, 0);
+
+        // Add the color label
+        push();
+        noStroke();
+        fill(outlineColors[colorIndexMod][0], outlineColors[colorIndexMod][1], outlineColors[colorIndexMod][2]);
+        textSize(24);
+        textAlign(CENTER, CENTER);
+        text(`Color ${colorIndex}`, labelX, labelY);
+        pop();
+    }
+
+    // Reset line dash
+    drawingContext.setLineDash([]);
 }

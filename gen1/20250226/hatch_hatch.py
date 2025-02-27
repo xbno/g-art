@@ -1,0 +1,530 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, Rectangle, Polygon
+from matplotlib.path import Path
+from matplotlib.collections import PatchCollection, LineCollection
+import random
+import math
+import svgwrite
+from shapely.geometry import Point, Polygon as ShapelyPolygon, LineString
+from shapely.ops import unary_union
+import os
+from datetime import datetime
+
+
+class Shape:
+    def __init__(self, shape_type, x, y, size, color_index, z_index, rotation=0):
+        self.type = shape_type
+        self.x = x
+        self.y = y
+        self.size = size
+        self.color_index = color_index
+        self.z_index = z_index
+        self.rotation = rotation
+        self.points = self._generate_points()
+        self.polygon = self._generate_shapely_polygon()
+
+    def _generate_points(self):
+        points = []
+        if self.type == "circle":
+            # Approximate circle with a regular polygon
+            num_sides = 64
+            radius = self.size / 2
+            for i in range(num_sides):
+                angle = 2 * math.pi * i / num_sides
+                x = self.x + radius * math.cos(angle)
+                y = self.y + radius * math.sin(angle)
+                points.append((x, y))
+        elif self.type == "square":
+            half_size = self.size / 2
+            points = [
+                (self.x - half_size, self.y - half_size),
+                (self.x + half_size, self.y - half_size),
+                (self.x + half_size, self.y + half_size),
+                (self.x - half_size, self.y + half_size),
+            ]
+        elif self.type == "triangle":
+            for i in range(3):
+                angle = 2 * math.pi * i / 3 + self.rotation
+                x = self.x + self.size * math.cos(angle)
+                y = self.y + self.size * math.sin(angle)
+                points.append((x, y))
+        return points
+
+    def _generate_shapely_polygon(self):
+        return ShapelyPolygon(self.points)
+
+    def get_matplotlib_patch(self, color):
+        if self.type == "circle":
+            return Circle((self.x, self.y), self.size / 2, fill=True, color=color)
+        elif self.type == "square":
+            half_size = self.size / 2
+            return Rectangle(
+                (self.x - half_size, self.y - half_size),
+                self.size,
+                self.size,
+                fill=True,
+                color=color,
+            )
+        elif self.type == "triangle":
+            return Polygon(self.points, fill=True, color=color)
+
+    def get_outline_segments(self):
+        segments = []
+        for i in range(len(self.points)):
+            start = self.points[i]
+            end = self.points[(i + 1) % len(self.points)]
+            segments.append((start, end))
+        return segments
+
+    def contains_point(self, px, py):
+        return self.polygon.contains(Point(px, py))
+
+
+class HatchingGenerator:
+    def __init__(self, width=1200, height=1800, num_shapes=20):
+        self.width = width
+        self.height = height
+        self.shapes = self._generate_random_shapes(num_shapes)
+
+        # Define color palette
+        self.colors = ["#4361ee", "#4cc9f0", "#ef476f", "#ffd166", "#06d6a0"]
+
+        # Define hatching patterns
+        self.hatching_patterns = [
+            {"angles": [0], "spacing": 12},  # Pattern 0: Horizontal
+            {"angles": [15], "spacing": 12},  # Pattern 1: 15°
+            {"angles": [30], "spacing": 12},  # Pattern 2: 30°
+            {"angles": [45], "spacing": 12},  # Pattern 3: 45°
+            {"angles": [60], "spacing": 12},  # Pattern 4: 60°
+            {"angles": [75], "spacing": 12},  # Pattern 5: 75°
+            {"angles": [90], "spacing": 12},  # Pattern 6: Vertical
+            # Perpendicular pairs
+            {"angles": [0, 90], "spacing": 12},  # Pattern 7: Grid
+            {"angles": [15, 105], "spacing": 12},  # Pattern 8: 15°/105° grid
+            {"angles": [30, 120], "spacing": 12},  # Pattern 9: 30°/120° grid
+            {
+                "angles": [45, 135],
+                "spacing": 12,
+            },  # Pattern 10: 45°/135° grid (diagonal crosshatch)
+            # More random combinations
+            {"angles": [0, 45], "spacing": 12},  # Pattern 11
+            {"angles": [30, 75], "spacing": 12},  # Pattern 12
+            {"angles": [15, 60], "spacing": 12},  # Pattern 13
+            {"angles": [0, 30, 60, 90], "spacing": 20},  # Pattern 14
+            {"angles": [15, 45, 75], "spacing": 18},  # Pattern 15
+        ]
+
+        # Assign colors to shapes
+        self._assign_colors()
+
+    def _generate_random_shapes(self, count):
+        shapes = []
+        padding = 50
+
+        for i in range(count):
+            x = random.uniform(padding, self.width - padding)
+            y = random.uniform(padding, self.height - padding)
+            shape_type = random.choice(["circle", "square", "triangle"])
+
+            if shape_type == "circle":
+                diameter = random.uniform(50, 240)
+                if (
+                    x - diameter / 2 >= padding
+                    and x + diameter / 2 <= self.width - padding
+                    and y - diameter / 2 >= padding
+                    and y + diameter / 2 <= self.height - padding
+                ):
+                    shapes.append(Shape("circle", x, y, diameter, 0, i))
+
+            elif shape_type == "square":
+                size = random.uniform(50, 400)
+                if (
+                    x - size / 2 >= padding
+                    and x + size / 2 <= self.width - padding
+                    and y - size / 2 >= padding
+                    and y + size / 2 <= self.height - padding
+                ):
+                    shapes.append(Shape("square", x, y, size, 0, i))
+
+            else:  # triangle
+                size = random.uniform(25, 400)
+                rotation = random.randint(0, 3) * (math.pi / 2)
+                # Simple check if triangle fits within bounds
+                if (
+                    x - size >= padding
+                    and x + size <= self.width - padding
+                    and y - size >= padding
+                    and y + size <= self.height - padding
+                ):
+                    shapes.append(Shape("triangle", x, y, size, 0, i, rotation))
+
+        return shapes
+
+    def _assign_colors(self):
+        for i, shape in enumerate(self.shapes):
+            shape.color_index = i % len(self.colors)
+
+    def calculate_effective_regions(self):
+        """Calculate the effective regions for each color, respecting z-index"""
+        # Sort shapes by z-index
+        sorted_shapes = sorted(self.shapes, key=lambda s: s.z_index)
+
+        # Find unique color indices
+        color_indices = set([shape.color_index for shape in self.shapes])
+
+        # Create a dictionary to hold merged polygons for each color
+        color_regions = {color_idx: [] for color_idx in color_indices}
+
+        # Process shapes in z-index order (back to front)
+        for shape in sorted_shapes:
+            # Add this shape to its color region
+            color_regions[shape.color_index].append(shape.polygon)
+
+            # For any shape, remove its area from any lower z-index shapes
+            for other_shape in sorted_shapes:
+                if other_shape.z_index < shape.z_index:
+                    for i, region in enumerate(color_regions[other_shape.color_index]):
+                        if region.intersects(shape.polygon):
+                            # Remove the intersection from the region
+                            difference = region.difference(shape.polygon)
+                            if not difference.is_empty:
+                                color_regions[other_shape.color_index][i] = difference
+                            else:
+                                # If the region is completely covered, remove it
+                                color_regions[other_shape.color_index][i] = None
+
+                    # Remove None entries
+                    color_regions[other_shape.color_index] = [
+                        r
+                        for r in color_regions[other_shape.color_index]
+                        if r is not None
+                    ]
+
+        return color_regions
+
+    def generate_hatching_lines(self, color_regions):
+        """Generate hatching lines for each color region"""
+        hatching_lines = {}
+
+        for color_idx, regions in color_regions.items():
+            if not regions:
+                continue
+
+            # Get the hatching pattern for this color
+            pattern = self.hatching_patterns[color_idx % len(self.hatching_patterns)]
+
+            # Union all regions of this color
+            if len(regions) > 1:
+                try:
+                    merged_region = unary_union(regions)
+                except Exception:
+                    # If union fails, just use individual regions
+                    merged_region = regions
+            else:
+                merged_region = regions[0] if regions else None
+
+            if merged_region is None:
+                continue
+
+            # Calculate a bounding box for the region
+            bounds = merged_region.bounds  # (minx, miny, maxx, maxy)
+
+            # Add padding to ensure coverage
+            padding = 100
+            minx, miny, maxx, maxy = bounds
+            minx -= padding
+            miny -= padding
+            maxx += padding
+            maxy += padding
+
+            # Initialize list for this color's lines
+            hatching_lines[color_idx] = []
+
+            # Process each angle in the pattern
+            for angle in pattern["angles"]:
+                # Calculate angle in radians
+                angle_rad = angle * (math.pi / 180)
+
+                # Calculate perpendicular direction
+                perp_angle = angle_rad + math.pi / 2
+                perp_x = math.cos(perp_angle)
+                perp_y = math.sin(perp_angle)
+
+                # Calculate diagonal length for full coverage
+                diagonal_length = math.sqrt((maxx - minx) ** 2 + (maxy - miny) ** 2)
+
+                # Calculate center point
+                center_x = (minx + maxx) / 2
+                center_y = (miny + maxy) / 2
+
+                # Calculate number of lines needed
+                spacing = pattern["spacing"]
+                num_lines = math.ceil(diagonal_length / spacing) * 2
+                start_offset = -diagonal_length / 2
+
+                # Direction vector
+                dir_x = math.cos(angle_rad)
+                dir_y = math.sin(angle_rad)
+
+                # Generate hatching lines
+                for i in range(num_lines):
+                    offset = start_offset + i * spacing
+
+                    # Calculate offset point
+                    offset_x = perp_x * offset
+                    offset_y = perp_y * offset
+
+                    # Create a very long line
+                    start_x = center_x + offset_x - dir_x * diagonal_length
+                    start_y = center_y + offset_y - dir_y * diagonal_length
+                    end_x = center_x + offset_x + dir_x * diagonal_length
+                    end_y = center_y + offset_y + dir_y * diagonal_length
+
+                    hatch_line = LineString([(start_x, start_y), (end_x, end_y)])
+
+                    # Clip line to the region
+                    try:
+                        if isinstance(merged_region, list):
+                            # If it's a list of regions, intersect with each
+                            for region in merged_region:
+                                intersection = hatch_line.intersection(region)
+                                if not intersection.is_empty:
+                                    if intersection.geom_type == "LineString":
+                                        hatching_lines[color_idx].append(
+                                            list(intersection.coords)
+                                        )
+                                    elif intersection.geom_type == "MultiLineString":
+                                        for line in intersection.geoms:
+                                            hatching_lines[color_idx].append(
+                                                list(line.coords)
+                                            )
+                        else:
+                            # Regular intersection
+                            intersection = hatch_line.intersection(merged_region)
+                            if not intersection.is_empty:
+                                if intersection.geom_type == "LineString":
+                                    hatching_lines[color_idx].append(
+                                        list(intersection.coords)
+                                    )
+                                elif intersection.geom_type == "MultiLineString":
+                                    for line in intersection.geoms:
+                                        hatching_lines[color_idx].append(
+                                            list(line.coords)
+                                        )
+                    except Exception as e:
+                        print(f"Error intersecting line with region: {e}")
+                        continue
+
+        return hatching_lines
+
+    def find_composite_outline(self):
+        """Find the outline segments of the composite shape"""
+        # Merge all shapes
+        all_polygons = [shape.polygon for shape in self.shapes]
+        try:
+            merged = unary_union(all_polygons)
+
+            # Extract the exterior coordinates
+            if merged.geom_type == "Polygon":
+                exterior_coords = list(merged.exterior.coords)
+                return [
+                    (
+                        (exterior_coords[i][0], exterior_coords[i][1]),
+                        (exterior_coords[i + 1][0], exterior_coords[i + 1][1]),
+                    )
+                    for i in range(len(exterior_coords) - 1)
+                ]
+            elif merged.geom_type == "MultiPolygon":
+                segments = []
+                for poly in merged.geoms:
+                    exterior_coords = list(poly.exterior.coords)
+                    segments.extend(
+                        [
+                            (
+                                (exterior_coords[i][0], exterior_coords[i][1]),
+                                (exterior_coords[i + 1][0], exterior_coords[i + 1][1]),
+                            )
+                            for i in range(len(exterior_coords) - 1)
+                        ]
+                    )
+                return segments
+            else:
+                # Fallback to individual shape outlines
+                outline_segments = []
+                for shape in self.shapes:
+                    outline_segments.extend(shape.get_outline_segments())
+                return outline_segments
+        except Exception as e:
+            print(f"Error finding composite outline: {e}")
+            # Fallback to individual shape outlines
+            outline_segments = []
+            for shape in self.shapes:
+                outline_segments.extend(shape.get_outline_segments())
+            return outline_segments
+
+    def visualize(self, show_hatching=False):
+        """Visualize the shapes and optionally the hatching patterns"""
+        fig, ax = plt.subplots(figsize=(12, 18))
+        ax.set_xlim(0, self.width)
+        ax.set_ylim(0, self.height)
+
+        # Draw filled shapes
+        for shape in self.shapes:
+            color = self.colors[shape.color_index % len(self.colors)]
+            patch = shape.get_matplotlib_patch(color)
+            ax.add_patch(patch)
+
+        # Calculate and draw the composite outline
+        outline_segments = self.find_composite_outline()
+        outline_collection = LineCollection(
+            outline_segments, colors="black", linewidths=2
+        )
+        ax.add_collection(outline_collection)
+
+        if show_hatching:
+            # Calculate effective regions and hatching lines
+            color_regions = self.calculate_effective_regions()
+            hatching_lines = self.generate_hatching_lines(color_regions)
+
+            # Draw hatching lines
+            for color_idx, lines in hatching_lines.items():
+                line_collection = LineCollection(lines, colors="black", linewidths=0.5)
+                ax.add_collection(line_collection)
+
+        # Add debug text for each shape
+        for shape in self.shapes:
+            ax.text(
+                shape.x,
+                shape.y,
+                f"C{shape.color_index}",
+                ha="center",
+                va="center",
+                fontsize=12,
+                color="white",
+                fontweight="bold",
+            )
+
+        ax.set_aspect("equal")
+        ax.axis("off")
+        plt.tight_layout()
+        plt.show()
+
+    def visualize_color_regions(self):
+        """Visualize the effective regions for each color"""
+        fig, ax = plt.subplots(figsize=(12, 18))
+        ax.set_xlim(0, self.width)
+        ax.set_ylim(0, self.height)
+
+        # Draw filled shapes first
+        for shape in self.shapes:
+            color = self.colors[shape.color_index % len(self.colors)]
+            patch = shape.get_matplotlib_patch(color)
+            ax.add_patch(patch)
+
+        # Calculate effective regions
+        color_regions = self.calculate_effective_regions()
+
+        # Draw outlines around effective regions for each color
+        outline_colors = ["red", "green", "blue", "orange", "purple"]
+
+        for color_idx, regions in color_regions.items():
+            outline_color = outline_colors[color_idx % len(outline_colors)]
+
+            for region in regions:
+                if isinstance(region, ShapelyPolygon):
+                    # Extract coordinates from the polygon
+                    x, y = region.exterior.xy
+                    ax.plot(x, y, color=outline_color, linestyle="--", linewidth=2)
+
+                    # Add a label in the center of the region
+                    centroid = region.centroid
+                    ax.text(
+                        centroid.x,
+                        centroid.y,
+                        f"Color {color_idx}",
+                        ha="center",
+                        va="center",
+                        fontsize=14,
+                        color=outline_color,
+                        fontweight="bold",
+                    )
+
+        # Add the main black outline
+        outline_segments = self.find_composite_outline()
+        outline_collection = LineCollection(
+            outline_segments, colors="black", linewidths=2
+        )
+        ax.add_collection(outline_collection)
+
+        ax.set_aspect("equal")
+        ax.axis("off")
+        plt.tight_layout()
+        plt.show()
+
+    def export_svg(self, filename=None):
+        """Export the design as an SVG file"""
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join(
+                os.path.expanduser("~/Downloads"), f"plotter_hatching_{timestamp}.svg"
+            )
+
+        # Calculate effective regions and hatching lines
+        color_regions = self.calculate_effective_regions()
+        hatching_lines = self.generate_hatching_lines(color_regions)
+
+        # Find composite outline
+        outline_segments = self.find_composite_outline()
+
+        # Create SVG
+        dwg = svgwrite.Drawing(
+            filename, size=(f"{self.width}px", f"{self.height}px"), profile="tiny"
+        )
+
+        # Add white background
+        dwg.add(dwg.rect(insert=(0, 0), size=(self.width, self.height), fill="white"))
+
+        # Add hatching groups for each color
+        for color_idx, lines in hatching_lines.items():
+            g = dwg.add(dwg.g(id=f"color-{color_idx}"))
+            for line in lines:
+                if (
+                    len(line) >= 2
+                ):  # Make sure the line has at least start and end points
+                    g.add(
+                        dwg.line(
+                            start=line[0], end=line[1], stroke="black", stroke_width=1
+                        )
+                    )
+
+        # Add outline
+        g_outline = dwg.add(dwg.g(id="outlines"))
+        for segment in outline_segments:
+            g_outline.add(
+                dwg.line(
+                    start=segment[0], end=segment[1], stroke="black", stroke_width=10
+                )
+            )
+
+        # Save SVG
+        dwg.save()
+        print(f"SVG saved to {filename}")
+
+        return filename
+
+
+# Usage example
+if __name__ == "__main__":
+    # Create the generator
+    generator = HatchingGenerator(width=1200, height=1800, num_shapes=15)
+
+    # Visualize shapes with color labels
+    generator.visualize(show_hatching=False)
+
+    # Visualize effective color regions
+    generator.visualize_color_regions()
+
+    # Export SVG
+    svg_file = generator.export_svg()
+    print(f"SVG exported to: {svg_file}")

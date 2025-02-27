@@ -1,0 +1,82 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceRoot}",
+            },
+            "justMyCode": false,
+        },
+        {
+            "name": "hatching",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/gen1/20250226/hatch_hatch.py",
+            "console": "integratedTerminal",
+            // "justMyCode": false,
+            // "args": [
+            //     "--event",
+            //     // "{\"trigger_type\": \"30_min_trigger\"}",
+            //     "{\"Records\": [{\"eventVersion\": \"2.1\", \"eventSource\": \"aws:s3\", \"awsRegion\": \"us-east-1\", \"eventTime\": \"2021-11-23T05:34:34.243Z\", \"eventName\": \"ObjectCreated:CompleteMultipartUpload\", \"userIdentity\": {\"principalId\": \"AWS:AROAX6BHJE3EPL24EZYQF:dl5_refactor_v01_mc_raw_bt_to_pq\"}, \"requestParameters\": {\"sourceIPAddress\": \"3.94.202.185\"}, \"responseElements\": {\"x-amz-request-id\": \"A46CGFT723ZET4VW\", \"x-amz-id-2\": \"8B/OMV9MxFJZK4VxC09eWFZ6uUevjktq/HMu13mBkEUQ9TIVXLaOwUfiyTbjFcDdy/Kdex0moijK6aFvVw4g+U3L9a/sO/c/1sY2OninOAA=\"}, \"s3\": {\"s3SchemaVersion\": \"1.0\", \"configurationId\": \"ZDYxOTg2MWEtNjUzZS00ZWNjLTg5OWYtMDNlNWYyZDJlNzFl\", \"bucket\": {\"name\": \"ghc-options-data-cdk5\", \"ownerIdentity\": {\"principalId\": \"A382034RK8EZWE\"}, \"arn\": \"arn:aws:s3:::ghc-options-data-cdk5\"}, \"object\": {\"key\": \"mc/pq/bt/date%3D2021-11-22/OptionTradeScreenerResults_20211122.pq\", \"size\": 26300822, \"eTag\": \"02d5123f4ab3c8d1c4ea2ac92baf3f40-5\", \"versionId\": \"ZVq4Iy5c1av.xXz2k5XrpAHmEg.6uH6I\", \"sequencer\": \"00619C7D68E401C2B3\"}}}]}",
+            //     "--context",
+            //     "{}",
+            // ],
+            "env": {
+                "ENV": "ent",
+                "AWS_DEFAULT_REGION": "us-east-1",
+                "BRANCH_NAME": "refactor_v0.1",
+                "AWS_REGION": "us-east-1",
+                "PYTHONPATH": "${workspaceRoot}",
+                "S3_JOBS_CONFIG": "s3://ghc-options-data-cdk/jobs.json",
+                "S3_BUCKET": "ghc-options-data-cdk",
+                "S3_YF_PQ_OC_KEY": "yf/pq/oc2",
+                "S3_YF_PQ_HX_KEY": "yf/pq/hx",
+                "S3_MC_RAW_KEY": "mc/raw",
+                "S3_MC_PQ_BT_KEY": "mc/pq/bt",
+                "S3_MC_RAW_BT_KEY": "mc/raw/bt",
+                "TD_CBOE_OC_SF_ARN": "arn:aws:states:us-east-1:545543235272:stateMachine:dl4_refactor_v01_td_cboe_oc_sf",
+                "TD_HX_SF_ARN": "arn:aws:states:us-east-1:545543235272:stateMachine:dl4_refactor_v01_td_hx",
+                "TABLE_STATUSES_ARN": "arn:aws:lambda:us-east-1:545543235272:function:opt_dl_table_statuses",
+                "TD_ENTRY_EXIT_ARN": "arn:aws:lambda:us-east-1:545543235272:function:dl4_refactor_v01_td_entry_exit",
+                "BT_PRED_SF_ARN": ""
+            }
+        },
+        {
+            "name": "lambda mc_raw_bt_to_pq",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/lambdas/mc_raw_bt_to_pq.py",
+            "console": "integratedTerminal",
+            // "justMyCode": false,
+            "args": [
+                // csv
+                "--event",
+                // "{\"Records\": [{\"eventVersion\": \"2.1\", \"eventSource\": \"aws:s3\", \"awsRegion\": \"us-east-1\", \"eventTime\": \"2020-07-21T05:34:42.639Z\", \"eventName\": \"ObjectCreated:CompleteMultipartUpload\", \"userIdentity\": {\"principalId\": \"AWS:AROAX6BHJE3EPL24EZYQF:i-047fd52790e16a363\"}, \"requestParameters\": {\"sourceIPAddress\": \"35.173.177.166\"}, \"responseElements\": {\"x-amz-request-id\": \"1E419F18EA6A7655\", \"x-amz-id-2\": \"qMn/F5u0n6YzS0L1oQFybvjLrXJ9HPILPwxdASxlHjokRFA9v1Yst6yGGQJcvqrKwy1kCIzb/8no4c5B1OCSbIqwa1pQ36GN\"}, \"s3\": {\"s3SchemaVersion\": \"1.0\", \"configurationId\": \"ZTQ2MWEzMzAtMjg2OC00NjRjLWFkMGUtZTExZTg1Y2VkYTll\", \"bucket\": {\"name\": \"ghc-options-data-cdk\", \"ownerIdentity\": {\"principalId\": \"A382034RK8EZWE\"}, \"arn\": \"arn:aws:s3:::ghc-options-data-cdk\"}, \"object\": {\"key\": \"mc/raw/bt/OptionTradeScreenerResults_20210218.csv\", \"size\": 20634148, \"eTag\": \"044c38c68f2b235da1cab61982b0d8c5-3\", \"sequencer\": \"005F167E7361B7BBB6\"}}}]}",
+                // "{\"Rerun\": {\"include\": \"csv\", \"exclude\": \"MACOS\"}}",
+                "{\"Rerun\": {\"files\": [\"s3://ghc-options-data-cdk/mc/raw/bt/OptionTradeScreenerResults_20210218.csv\", \"s3://ghc-options-data-cdk/mc/raw/bt/OptionTradeScreenerResults_20201230.csv\"]}}",
+                // zip
+                // "--event", "{\"Records\": [{\"eventVersion\": \"2.1\", \"eventSource\": \"aws:s3\", \"awsRegion\": \"us-east-1\", \"eventTime\": \"2020-07-21T05:34:42.639Z\", \"eventName\": \"ObjectCreated:CompleteMultipartUpload\", \"userIdentity\": {\"principalId\": \"AWS:AROAX6BHJE3EPL24EZYQF:i-047fd52790e16a363\"}, \"requestParameters\": {\"sourceIPAddress\": \"35.173.177.166\"}, \"responseElements\": {\"x-amz-request-id\": \"1E419F18EA6A7655\", \"x-amz-id-2\": \"qMn/F5u0n6YzS0L1oQFybvjLrXJ9HPILPwxdASxlHjokRFA9v1Yst6yGGQJcvqrKwy1kCIzb/8no4c5B1OCSbIqwa1pQ36GN\"}, \"s3\": {\"s3SchemaVersion\": \"1.0\", \"configurationId\": \"ZTQ2MWEzMzAtMjg2OC00NjRjLWFkMGUtZTExZTg1Y2VkYTll\", \"bucket\": {\"name\": \"ghc-options-data-cdk\", \"ownerIdentity\": {\"principalId\": \"A382034RK8EZWE\"}, \"arn\": \"arn:aws:s3:::ghc-options-data-cdk\"}, \"object\": {\"key\": \"mc/raw/blah/OptionTradeScreenerResults_20200817_20200821.zip\", \"size\": 20634148, \"eTag\": \"044c38c68f2b235da1cab61982b0d8c5-3\", \"sequencer\": \"005F167E7361B7BBB6\"}}}]}",
+                "--context",
+                "{}",
+            ],
+            "env": {
+                "ENV": "ent",
+                "PYTHONPATH": "${workspaceRoot}",
+                "S3_BUCKET": "ghc-options-data-cdk",
+                "S3_YF_PQ_OC_KEY": "yf/pq/oc2",
+                "S3_YF_PQ_HX_KEY": "yf/pq/hx",
+                "S3_MC_RAW_KEY": "mc/raw",
+                "S3_MC_PQ_BT_KEY": "mc/pq/bt",
+                "S3_MC_RAW_BT_KEY": "mc/raw/bt"
+            }
+        },
+    ]
+}
