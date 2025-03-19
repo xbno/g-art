@@ -133,10 +133,10 @@ class HatchingGenerator:
             {"angles": [45], "spacing": 3},  # Pattern 3: 45°
             {"angles": [-15], "spacing": 3},  # Pattern 1: 15°
             {"angles": [15], "spacing": 3},  # Pattern 1: 15°
-            {"angles": [30], "spacing": 3},  # Pattern 2: 30°
             {"angles": [-30], "spacing": 3},  # Pattern 2: 30°
-            {"angles": [60], "spacing": 3},  # Pattern 4: 60°
+            {"angles": [30], "spacing": 3},  # Pattern 2: 30°
             {"angles": [-60], "spacing": 3},  # Pattern 4: 60°
+            {"angles": [60], "spacing": 3},  # Pattern 4: 60°
             {"angles": [-75], "spacing": 3},  # Pattern 5: 75°
             {"angles": [75], "spacing": 3},  # Pattern 5: 75°
             {"angles": [0], "spacing": 3},  # Pattern 0: Horizontal
@@ -611,21 +611,21 @@ class HatchingGenerator:
                             ]
                         )
 
-                        # Add interior boundaries (holes)
-                        for interior in poly.interiors:
-                            interior_coords = list(interior.coords)
-                            segments.extend(
-                                [
-                                    (
-                                        (interior_coords[i][0], interior_coords[i][1]),
-                                        (
-                                            interior_coords[i + 1][0],
-                                            interior_coords[i + 1][1],
-                                        ),
-                                    )
-                                    for i in range(len(interior_coords) - 1)
-                                ]
-                            )
+                        # # Add interior boundaries (holes)
+                        # for interior in poly.interiors:
+                        #     interior_coords = list(interior.coords)
+                        #     segments.extend(
+                        #         [
+                        #             (
+                        #                 (interior_coords[i][0], interior_coords[i][1]),
+                        #                 (
+                        #                     interior_coords[i + 1][0],
+                        #                     interior_coords[i + 1][1],
+                        #                 ),
+                        #             )
+                        #             for i in range(len(interior_coords) - 1)
+                        #         ]
+                        #     )
 
             return segments
 
@@ -991,5 +991,19 @@ class InteractiveHatchingApp:
 
 # Usage example
 if __name__ == "__main__":
-    app = InteractiveHatchingApp(width=1100, height=1700, num_shapes=1000)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate hatched shapes")
+    parser.add_argument("--width", type=int, default=1100, help="Width of the canvas")
+    parser.add_argument("--height", type=int, default=1700, help="Height of the canvas")
+    parser.add_argument(
+        "--num-shapes", type=int, default=1000, help="Number of shapes to generate"
+    )
+
+    args = parser.parse_args()
+    app = InteractiveHatchingApp(
+        width=args.width,
+        height=args.height,
+        num_shapes=args.num_shapes,
+    )
     app.run()
