@@ -2,26 +2,22 @@ import random
 import svgwrite
 import matplotlib.pyplot as plt
 from cairosvg import svg2png
+from IPython.display import Image
 import io
-import math
-import matplotlib
-
-matplotlib.use("Agg")  # Add this near the top of your script, before importing pyplot
-import matplotlib.pyplot as plt
 
 
-def create_staggered_letter_grid(
+def create_letter_grid(
     width=800,
     height=800,
-    cell_size=40,  # Base size for grid cells
-    letter_size=None,  # Font size
-    grid_angle=45,  # Angle of rotation for the grid in degrees
-    stagger_offset=0.5,  # Offset for staggered rows (0.5 = half cell)
-    horizontal_spacing=1.0,
-    vertical_spacing=1.0,
-    highlight_pattern="aurea",
-    output_filename="staggered_letter_grid.svg",
-    show_preview=True,
+    cell_size=26,  # Base grid cell size
+    letter_size=None,  # Font size (defaults to cell_size//2 if None)
+    x_offset_factor=0.33,  # Horizontal offset within cell (as proportion of cell_size)
+    y_offset_factor=0.5,  # Vertical offset within cell (as proportion of cell_size)
+    horizontal_spacing=1.0,  # Multiplier for horizontal letter spacing
+    vertical_spacing=1.0,  # Multiplier for vertical letter spacing
+    output_filename="letter_grid.svg",
+    add_rectangles=False,
+    preview=True,
 ):
     # Set default letter size if not specified
     if letter_size is None:
@@ -35,180 +31,189 @@ def create_staggered_letter_grid(
     dwg = svgwrite.Drawing(output_filename, size=(f"{width}px", f"{height}px"))
 
     # Define the sequence
-    # sequence = ["a", "u", "r", "e"]
-    sequence = ["e", "r", "u", "a"]
+    sequence = ["a", "u", "r", "e"]
 
-    # Calculate grid dimensions
-    # Add extra rows/cols to compensate for rotation and ensure the canvas is filled
-    cols = int(width / h_spacing * 1.5) + 1
-    rows = int(height / v_spacing * 1.5) + 1
+    # Calculate grid dimensions based on spacings
+    cols = int(width / h_spacing) + 1  # +1 to ensure we fill the canvas
+    rows = int(height / v_spacing) + 1  # +1 to ensure we fill the canvas
 
     # Create a matrix to track where letters have been placed
     grid = [[" " for _ in range(cols)] for _ in range(rows)]
 
-    # Create groups for different letter styles
-    outlined_letters = dwg.add(
+    # Create the grid with multiple word rows
+    num_word_rows = rows // len(
+        sequence
+    )  # Number of complete word sequences that can fit
+
+    # Rectangle dimensions
+    rect_width = h_spacing * 5  # Width to cover 4 letters
+    rect_height = cell_size * 1.0  # Height of rectangle
+
+    # Create a group for all letters
+    letters_group = dwg.add(
         dwg.g(
             font_family="'Roboto Mono', monospace",
             font_size=f"{letter_size}px",
             fill="none",
             stroke="black",
-            stroke_width="0.5",
+            stroke_width="0.1",
         )
     )
 
-    crosshatched_letters = dwg.add(
-        dwg.g(font_family="'Roboto Mono', monospace", font_size=f"{letter_size}px")
-    )
+    # Add letters to the grid
+    for col in range(0, cols):
+        for word_row in range(num_word_rows):
+            # Calculate vertical offset for this word row
+            y_offset = word_row * len(sequence) * v_spacing
 
-    # Create a pattern for cross-hatching
-    pattern_size = 10
-    pattern = dwg.defs.add(
-        dwg.pattern(
-            id="crosshatch",
-            patternUnits="userSpaceOnUse",
-            size=(pattern_size, pattern_size),
+            # Create sequence for this column
+            curr_sequence = []
+            for i in range(len(sequence)):
+                curr_sequence.append(sequence[(col + i) % len(sequence)])
+
+            # Draw the vertical sequence
+            for i in range(len(sequence)):
+                letter = curr_sequence[i]
+                x = col * h_spacing + h_spacing * x_offset_factor
+                y = y_offset + i * v_spacing + v_spacing * y_offset_factor
+                letters_group.add(dwg.text(letter, insert=(x, y), fill="black"))
+
+                # Try to update grid if within bounds
+                row_idx = word_row * len(sequence) + i
+                if 0 <= row_idx < len(grid) and 0 <= col < len(grid[0]):
+                    grid[row_idx][col] = letter
+
+    if add_rectangles:
+        # Create a group for rectangles
+        rect_group = dwg.add(dwg.g())
+
+        # Generate rectangle indices
+        horizontal_rect_idxs = []
+        vertical_rect_idxs = []
+
+        # Adjust pattern for horizontal rectangles based on new spacing
+        for i in range(0, cols - 4, 4):
+            for j in range(0, rows, 4):
+                horizontal_rect_idxs.append(("h", i, j))
+
+        for i in range(2, cols - 4, 4):
+            for j in range(2, rows, 4):
+                horizontal_rect_idxs.append(("h", i, j))
+
+        # Adjust pattern for vertical rectangles based on new spacing
+        for i in range(0, cols - 4, 4):
+            for j in range(2, rows, 4):
+                vertical_rect_idxs.append(("v", i, j))
+
+        for i in range(2, cols - 4, 4):
+            for j in range(4, rows - 4, 4):
+                vertical_rect_idxs.append(("v", i, j))
+
+        # Combine and shuffle rectangles
+        all_idxs = horizontal_rect_idxs + vertical_rect_idxs
+        random.shuffle(all_idxs)
+
+        # Keep approximately 15% of the rectangles
+        selected_idxs = all_idxs[: int(len(all_idxs) * 0.15)]
+
+        # Add selected rectangles
+        for idx in selected_idxs:
+            if idx[0] == "h":
+                # Horizontal rectangle
+                center_r_col = idx[1]
+                center_r_row = idx[2]
+                center_x = center_r_col * h_spacing
+                center_y = center_r_row * v_spacing + v_spacing / 2
+                rect_group.add(
+                    dwg.rect(
+                        insert=(center_x, center_y - rect_height / 2),
+                        size=(rect_width, rect_height),
+                        fill="none",
+                        stroke="red",
+                        stroke_width=2,
+                    )
+                )
+            else:
+                # Vertical rectangle
+                center_r_col = idx[1]
+                center_r_row = idx[2]
+                center_x = center_r_col * h_spacing
+                center_y = center_r_row * v_spacing + v_spacing / 2
+                rect_group.add(
+                    dwg.rect(
+                        insert=(center_x, center_y - rect_width / 2),
+                        size=(rect_height, rect_width),
+                        fill="none",
+                        stroke="red",
+                        stroke_width=2,
+                    )
+                )
+
+    if preview:
+        # Convert SVG to PNG bytes
+        svg_string = dwg.tostring()
+        png_bytes = io.BytesIO()
+        svg2png(bytestring=svg_string, write_to=png_bytes)
+        png_bytes.seek(0)
+
+        # Display the image
+        plt.figure(figsize=(12, 12))
+        plt.imshow(plt.imread(png_bytes, format="png"))
+        plt.axis("off")
+        plt.title(
+            f"Letter Grid (Horizontal spacing: {horizontal_spacing}, Vertical spacing: {vertical_spacing}, Letter size: {letter_size}px)"
         )
-    )
+        plt.show()
+        plt.savefig(output_filename.replace(".svg", "_preview.png"))
+        plt.close()
 
-    # Add lines for the crosshatch pattern
-    pattern.add(
-        dwg.line(
-            start=(0, 0),
-            end=(pattern_size, pattern_size),
-            stroke="black",
-            stroke_width="0.5",
-        )
-    )
-    pattern.add(
-        dwg.line(
-            start=(pattern_size, 0),
-            end=(0, pattern_size),
-            stroke="black",
-            stroke_width="0.5",
-        )
-    )
-
-    # Calculate the center of the canvas for rotation
-    center_x = width / 2
-    center_y = height / 2
-
-    # Convert grid angle to radians
-    angle_rad = math.radians(grid_angle)
-
-    # Track positions of potential highlight patterns
-    pattern_positions = []
-    letter_positions = []
-
-    # Function to rotate a point around the center
-    def rotate_point(x, y, cx, cy, angle):
-        # Translate point to origin
-        x_shifted = x - cx
-        y_shifted = y - cy
-
-        # Rotate point
-        x_rotated = x_shifted * math.cos(angle) - y_shifted * math.sin(angle)
-        y_rotated = x_shifted * math.sin(angle) + y_shifted * math.cos(angle)
-
-        # Translate back
-        x_final = x_rotated + cx
-        y_final = y_rotated + cy
-
-        return x_final, y_final
-
-    # Generate staggered grid points and place letters
-    for row in range(-rows // 2, rows // 2):
-        for col in range(-cols // 2, cols // 2):
-            # Apply staggering to odd rows
-            stagger = (stagger_offset * h_spacing) if row % 2 == 1 else 0
-
-            # Calculate base position
-            base_x = center_x + col * h_spacing + stagger
-            base_y = center_y + row * v_spacing
-
-            # Rotate the point
-            x, y = rotate_point(base_x, base_y, center_x, center_y, angle_rad)
-
-            # Skip if outside canvas with some margin
-            margin = 100  # Pixels margin to ensure we cover the edges
-            if x < -margin or x > width + margin or y < -margin or y > height + margin:
-                continue
-
-            # Determine which letter to place based on position
-            # We'll use a rule that cycles through the sequence
-            letter_idx = (abs(row) + abs(col)) % len(sequence)
-            letter = sequence[letter_idx]
-
-            # Add to letter positions
-            letter_positions.append((x, y, letter, letter_idx))
-
-    # Sort letter positions to create interesting patterns
-    # This can create continuous sequences for highlighting
-    letter_positions.sort(key=lambda pos: (pos[1] // (v_spacing / 2), pos[0]))
-
-    # Find pattern matches in the sorted positions
-    for i in range(len(letter_positions) - len(highlight_pattern) + 1):
-        possible_pattern = ""
-        for j in range(len(highlight_pattern)):
-            possible_pattern += letter_positions[i + j][2]
-
-        if possible_pattern == highlight_pattern:
-            pattern_positions.append(i)
-
-    # Place letters
-    for i, (x, y, letter, letter_idx) in enumerate(letter_positions):
-        # Add to appropriate group - all letters start as outlines
-        outlined_letters.add(dwg.text(letter, insert=(x, y), text_anchor="middle"))
-
-    # Add crosshatched letters for the highlighted pattern
-    for start_idx in pattern_positions:
-        for i in range(len(highlight_pattern)):
-            x, y, letter, _ = letter_positions[start_idx + i]
-
-            # Add a crosshatched version of this letter
-            text = dwg.text(letter, insert=(x, y), text_anchor="middle")
-            text.fill(pattern.get_paint_server())
-            crosshatched_letters.add(text)
-
-    # Save the SVG file
-    dwg.save()
-    print(f"Created staggered letter grid in '{output_filename}'")
-
-    # Display preview in the notebook if requested
-    if show_preview:
-        try:
-            # Convert SVG to PNG bytes
-            svg_string = dwg.tostring()
-            png_bytes = io.BytesIO()
-            svg2png(bytestring=svg_string, write_to=png_bytes)
-            png_bytes.seek(0)
-
-            # Display the image
-            plt.figure(figsize=(12, 12))
-            plt.imshow(plt.imread(png_bytes, format="png"))
-            plt.axis("off")
-            plt.title(
-                f"Staggered Letter Grid (angle: {grid_angle}°) with crosshatched '{highlight_pattern}' pattern"
-            )
-            plt.savefig(output_filename.replace(".svg", "_preview.png"))
-            plt.close()
-        except Exception as e:
-            print(f"Preview failed: {e}")
-            print("The SVG file was still created successfully.")
+    else:
+        # Save the SVG file
+        dwg.save()
+        print(f"Created letter grid in '{output_filename}'")
 
     return output_filename
 
 
-# Example usage
 if __name__ == "__main__":
-    create_staggered_letter_grid(
-        cell_size=40,
-        letter_size=18,
-        grid_angle=45,
-        stagger_offset=0.5,
-        horizontal_spacing=1.0,
-        vertical_spacing=1.0,
-        highlight_pattern="aurea",
-        output_filename="staggered_crosshatched_pattern.svg",
-        show_preview=True,
+    # Examples of different overlapping effects:
+    out_dir = "/Users/xbno/Downloads"
+    # 1. Normal spacing (no overlap)
+    # output_file = create_letter_grid(
+    #     cell_size=26,
+    #     letter_size=13,
+    #     horizontal_spacing=1.0,
+    #     vertical_spacing=1.0,
+    #     output_filename=f"{out_dir}/normal_grid.svg"
+    # )
+
+    # # 2. Dense horizontal overlap
+    # output_file = create_letter_grid(
+    #     cell_size=26,
+    #     letter_size=20,
+    #     horizontal_spacing=0.7,  # Compress horizontally
+    #     vertical_spacing=1.0,
+    #     output_filename=f"{out_dir}/horizontal_overlap_grid.svg"
+    # )
+
+    # 3. Dense overall overlap
+    # output_file = create_letter_grid(
+    #     cell_size=20,
+    #     letter_size=30,  # Larger letters
+    #     horizontal_spacing=0.7,  # Compress horizontally
+    #     vertical_spacing=0.85,    # Compress vertically
+    #     output_filename=f"{out_dir}/dense_overlap_grid.svg",
+    #     # preview=False
+    # )
+
+    # extra dense chunky
+    output_file = create_letter_grid(
+        cell_size=20,
+        letter_size=100,  # Larger letters
+        horizontal_spacing=1.5,  # 0.7,  # Compress horizontally
+        vertical_spacing=1.5,  # 0.85,    # Compress vertically
+        output_filename=f"{out_dir}/chunky_overlap_grid.svg",
+        preview=False,
     )
+
+    print("All SVG files created")
