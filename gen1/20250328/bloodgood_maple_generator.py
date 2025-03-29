@@ -6,6 +6,9 @@ from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import unary_union
 from datetime import datetime
 import os
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon as MplPolygon
+from matplotlib.collections import LineCollection, PatchCollection
 
 
 class BloodgoodMapleGenerator:
@@ -249,6 +252,76 @@ class BloodgoodMapleGenerator:
                 [(self.width / 2, 0), (0, self.height), (self.width, self.height)]
             )
 
+    def create_preview(self, filename=None):
+        """Create a PNG preview of the tree"""
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"bloodgood_maple_{timestamp}_preview.png"
+
+        # Create figure and axis
+        fig, ax = plt.subplots(figsize=(self.width / 100, self.height / 100), dpi=100)
+        ax.set_xlim(0, self.width)
+        ax.set_ylim(0, self.height)
+
+        # Plot tree silhouette (leaves)
+        if self.tree_silhouette is not None:
+            if self.tree_silhouette.geom_type == "Polygon":
+                exterior_coords = np.array(self.tree_silhouette.exterior.coords)
+                polygon = MplPolygon(
+                    exterior_coords, closed=True, color=self.leaf_color
+                )
+                ax.add_patch(polygon)
+
+                # Add holes
+                for interior in self.tree_silhouette.interiors:
+                    interior_coords = np.array(interior.coords)
+                    hole = MplPolygon(interior_coords, closed=True, color="white")
+                    ax.add_patch(hole)
+
+            elif self.tree_silhouette.geom_type == "MultiPolygon":
+                patches = []
+                for poly in self.tree_silhouette.geoms:
+                    exterior_coords = np.array(poly.exterior.coords)
+                    polygon = MplPolygon(exterior_coords, closed=True)
+                    patches.append(polygon)
+                p = PatchCollection(patches, color=self.leaf_color)
+                ax.add_collection(p)
+
+        # Plot branches
+        branch_segments = []
+        branch_widths = []
+
+        for branch_id, branch_data in self.branches.items():
+            line = branch_data["line"]
+            coords = list(line.coords)
+
+            # Create segments from consecutive points
+            for i in range(len(coords) - 1):
+                branch_segments.append([coords[i], coords[i + 1]])
+
+                # Calculate width based on branch level
+                width = branch_data["width"] * (1.1 - branch_data["level"] * 0.1)
+                width = max(width, 1) / 2  # Adjust for matplotlib
+                branch_widths.append(width)
+
+        # Create a LineCollection for all branch segments
+        if branch_segments:
+            lc = LineCollection(
+                branch_segments, linewidths=branch_widths, colors=self.branch_color
+            )
+            ax.add_collection(lc)
+
+        # Final adjustments
+        ax.set_facecolor("white")
+        ax.axis("off")
+        plt.tight_layout()
+
+        # Save figure
+        plt.savefig(filename, bbox_inches="tight", pad_inches=0)
+        plt.close(fig)
+        print(f"Preview saved to {filename}")
+        return filename
+
     def export_svg(self, filename=None):
         """Export the tree as an SVG file"""
         if filename is None:
@@ -314,7 +387,9 @@ class BloodgoodMapleGenerator:
         return filename
 
 
-def generate_bloodgood_maple(width=800, height=1000, iterations=7, output_file=None):
+def generate_bloodgood_maple(
+    width=800, height=1000, iterations=7, output_file=None, generate_preview=True
+):
     """
     Generate a Japanese Bloodgood Maple tree silhouette as SVG
 
@@ -323,21 +398,35 @@ def generate_bloodgood_maple(width=800, height=1000, iterations=7, output_file=N
     height (int): Height of the SVG canvas
     iterations (int): Number of branch iterations, higher values create more detailed trees
     output_file (str): Output filename (will generate a timestamped name if None)
+    generate_preview (bool): Whether to generate a PNG preview
 
     Returns:
-    str: Path to the saved SVG file
+    tuple: Paths to the saved SVG file and PNG preview (if generated)
     """
     generator = BloodgoodMapleGenerator(width, height, iterations)
     generator.generate_trunk()
     generator.generate_tree()
     generator.create_tree_silhouette()
-    return generator.export_svg(output_file)
+
+    svg_file = generator.export_svg(output_file)
+
+    if generate_preview:
+        # Create preview with same base filename but PNG extension
+        preview_file = os.path.splitext(svg_file)[0] + "_preview.png"
+        generator.create_preview(preview_file)
+        return svg_file, preview_file
+
+    return svg_file, None
 
 
 if __name__ == "__main__":
     # Generate a tree with default parameters
-    output_file = generate_bloodgood_maple(width=800, height=1000, iterations=6)
-    print(f"Generated tree saved to: {output_file}")
+    svg_file, preview_file = generate_bloodgood_maple(
+        width=800, height=1000, iterations=6
+    )
+    print(f"Generated tree saved to: {svg_file}")
+    if preview_file:
+        print(f"Preview saved to: {preview_file}")
 
     # Uncomment below to generate multiple trees with different parameters
     """
@@ -345,11 +434,11 @@ if __name__ == "__main__":
         width = random.randint(700, 900)
         height = random.randint(900, 1100)
         iterations = random.randint(5, 7)
-        output_file = generate_bloodgood_maple(
+        svg_file, preview_file = generate_bloodgood_maple(
             width=width, 
             height=height, 
             iterations=iterations,
             output_file=f"bloodgood_tree_variant_{i+1}.svg"
         )
-        print(f"Generated variant {i+1} saved to: {output_file}")
+        print(f"Generated variant {i+1} saved to: {svg_file}")
     """
