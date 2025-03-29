@@ -20,6 +20,6 @@ scp "$SVG_FILE" $PI_USER@$PI_ADDRESS:$PI_DESTINATION
 
 # Execute the plotting command
 echo "Starting plot job..."
-ssh $PI_USER@$PI_ADDRESS $NEXTDRAW_CMD $PI_DESTINATION/$(basename "$SVG_FILE") -q 3 -L 1
+ssh $PI_USER@$PI_ADDRESS $NEXTDRAW_CMD $PI_DESTINATION/$(basename "$SVG_FILE") -q 3 -L 2 -Y
 
 echo "Plot job submitted!"
