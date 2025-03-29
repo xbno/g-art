@@ -19,9 +19,13 @@ class BloodgoodMapleGenerator:
         # Deep burgundy red for Bloodgood maple
         self.leaf_color = "#8B0000"
         self.branch_color = "#1A0F0B"
-        self.trunk_width_base = 20
-        self.trunk_height = height * 0.3
-        self.trunk_start_y = height * 0.8
+        self.trunk_width_base = 15  # Reduced from 20 for more delicate appearance
+
+        # The tree grows upward from the bottom
+        self.trunk_height = height * 0.35  # Increased for taller trunk
+        self.trunk_start_y = (
+            height * 0.85
+        )  # Higher start position to ensure tree is visible
 
         # The root of our tree (trunk base)
         self.root_x = width // 2
@@ -44,7 +48,7 @@ class BloodgoodMapleGenerator:
         curve_factor = self.width * 0.05
         mid_x = self.root_x + random.uniform(-curve_factor, curve_factor)
 
-        # Create trunk control points
+        # Create trunk control points - growing upward from root_y
         points = [
             (self.root_x, self.root_y),
             (mid_x, self.root_y - self.trunk_height * 0.5),
@@ -66,11 +70,11 @@ class BloodgoodMapleGenerator:
     def generate_branch(self, start_point, direction, length, width, level):
         """Generate a branch starting from start_point in the given direction"""
         # Add some randomness to angle and length
-        angle_variation = math.pi / 6  # 30 degrees
+        angle_variation = math.pi / 12  # 15 degrees (reduced from 30)
         angle = direction + random.uniform(-angle_variation, angle_variation)
 
         # Adjust length with some randomness
-        length_variation = 0.2  # 20%
+        length_variation = 0.15  # 15% (reduced from 20%)
         adjusted_length = length * (
             1 + random.uniform(-length_variation, length_variation)
         )
@@ -79,8 +83,8 @@ class BloodgoodMapleGenerator:
         end_x = start_point[0] + adjusted_length * math.cos(angle)
         end_y = start_point[1] + adjusted_length * math.sin(angle)
 
-        # Add some curvature
-        curve_factor = length * 0.3
+        # Add some gentle curvature - reduced curve_factor for smoother branches
+        curve_factor = length * 0.15
         mid_x = (start_point[0] + end_x) / 2 + random.uniform(
             -curve_factor, curve_factor
         )
@@ -88,8 +92,25 @@ class BloodgoodMapleGenerator:
             -curve_factor, curve_factor
         )
 
+        # For smoother branches, add more control points
+        t1 = 0.33  # First intermediate point at 1/3 distance
+        t2 = 0.66  # Second intermediate point at 2/3 distance
+
+        # Calculate additional control points
+        p1_x = start_point[0] + t1 * (mid_x - start_point[0])
+        p1_y = start_point[1] + t1 * (mid_y - start_point[1])
+
+        p2_x = mid_x + t1 * (end_x - mid_x)
+        p2_y = mid_y + t1 * (end_y - mid_y)
+
         # Create control points for the branch
-        points = [start_point, (mid_x, mid_y), (end_x, end_y)]
+        points = [
+            start_point,
+            (p1_x, p1_y),
+            (mid_x, mid_y),
+            (p2_x, p2_y),
+            (end_x, end_y),
+        ]
 
         # Create LineString for branch
         branch = LineString(points)
@@ -122,6 +143,9 @@ class BloodgoodMapleGenerator:
         # Update parent reference
         self.branches[current_id]["parent"] = parent_id
 
+        # Direction is negative to grow upward (negative y-axis is up in the SVG coordinate system)
+        primary_direction = -math.pi / 2  # Points straight up
+
         # Determine how many child branches to create
         if level < 3:
             num_branches = random.randint(2, 3)
@@ -132,15 +156,19 @@ class BloodgoodMapleGenerator:
         for i in range(num_branches):
             # Branch direction (upwards with some spread)
             if i == 0:
-                # First branch continues somewhat in the same direction
-                new_direction = direction + random.uniform(-math.pi / 4, math.pi / 4)
+                # First branch continues somewhat in the same direction (generally upward)
+                new_direction = primary_direction + random.uniform(
+                    -math.pi / 6, math.pi / 6
+                )
             else:
                 # Other branches spread more
                 if random.random() < 0.5:
-                    new_direction = direction + random.uniform(math.pi / 4, math.pi / 2)
+                    new_direction = primary_direction + random.uniform(
+                        math.pi / 6, math.pi / 3
+                    )
                 else:
-                    new_direction = direction + random.uniform(
-                        -math.pi / 2, -math.pi / 4
+                    new_direction = primary_direction + random.uniform(
+                        -math.pi / 3, -math.pi / 6
                     )
 
             # Branch length decreases with level
@@ -172,7 +200,7 @@ class BloodgoodMapleGenerator:
         trunk = self.generate_trunk()
         trunk_end = list(trunk.coords)[-1]
 
-        # Initial branches from the top of the trunk
+        # Initial branches from the top of the trunk - always grow upward
         num_initial_branches = random.randint(3, 5)
 
         for i in range(num_initial_branches):
@@ -190,20 +218,41 @@ class BloodgoodMapleGenerator:
 
     def create_leaf_shape(self, position, size):
         """Create a maple leaf shape at the given position"""
-        # Simplified maple leaf shape (5-lobed leaf)
+        # More detailed and smoother maple leaf shape
         angle_offset = random.uniform(0, 2 * math.pi)  # Random rotation
 
-        lobes = 5
+        # More points for smoother leaf shape
+        num_points = 30
         points = []
 
-        for i in range(10):  # 10 points to create 5 lobes (peak and valley for each)
-            angle = angle_offset + (2 * math.pi * i) / 10
+        # Base shape control parameters
+        lobe_depth = 0.4  # How deep the cuts between lobes are
+        lobe_sharpness = 0.7  # How pointed the lobes are
+
+        for i in range(num_points):
+            angle = angle_offset + (2 * math.pi * i) / num_points
             radius = size
 
-            if i % 2 == 0:  # Lobe peaks
-                radius *= 0.8 + random.uniform(0, 0.4)
-            else:  # Valleys between lobes
-                radius *= 0.3 + random.uniform(0, 0.2)
+            # Create the 5-lobed maple leaf pattern
+            # Major lobes at 0, 2π/5, 4π/5, 6π/5, 8π/5
+            # Find the closest lobe angle
+            lobe_angles = [angle_offset + j * 2 * math.pi / 5 for j in range(5)]
+            min_angle_diff = min(
+                [
+                    abs(((angle - lobe_angle + math.pi) % (2 * math.pi)) - math.pi)
+                    for lobe_angle in lobe_angles
+                ]
+            )
+
+            # Adjust radius based on how close we are to a lobe
+            lobe_factor = min_angle_diff / (math.pi / 5)
+
+            # At the lobes (when lobe_factor is 0), radius is maximum
+            # Between lobes, radius is reduced by lobe_depth factor
+            radius *= 1 - lobe_depth * min(1, lobe_factor / lobe_sharpness)
+
+            # Add some randomness for a natural look
+            radius *= 0.95 + random.uniform(0, 0.1)
 
             x = position[0] + radius * math.cos(angle)
             y = position[1] + radius * math.sin(angle)
