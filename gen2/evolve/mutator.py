@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 HERE = Path(__file__).parent.parent      # gen2/
 REPO_ROOT = HERE.parent                  # g-art/ (where .claude/commands is)
 CLI_TIMEOUT = 1800  # the command renders + inspects its own candidates
+MODEL = "claude-sonnet-5"  # mutator default; override with --model
+                           # (claude-opus-4-8 for harder steering)
 ALLOWED_TOOLS = ("Read,Write,"
                  "Bash(.venv/bin/python gen2/evolve/preview.py:*)")
 
@@ -68,7 +70,7 @@ class CliMutator:
                  payload_dir: Path | None = None):
         if not shutil.which("claude"):
             raise FileNotFoundError("claude CLI not on PATH")
-        self.model = model
+        self.model = model or MODEL
         self.payload_dir = payload_dir or Path(tempfile.mkdtemp(
             prefix="mutate_"))
 
@@ -109,9 +111,7 @@ class CliMutator:
         path.write_text(json.dumps(payload, sort_keys=True))
         cmd = ["claude", "-p", f"/mutate-genome {path}",
                "--output-format", "json", "--allowedTools", ALLOWED_TOOLS,
-               "--strict-mcp-config"]
-        if self.model:
-            cmd += ["--model", self.model]
+               "--strict-mcp-config", "--model", self.model]
         env = {k: v for k, v in os.environ.items()
                if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.run(cmd, capture_output=True, text=True,

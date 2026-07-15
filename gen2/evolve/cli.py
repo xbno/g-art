@@ -73,7 +73,8 @@ def main() -> None:
     ap.add_argument("--random", action="store_true",
                     help="force the no-CLI random mutator")
     ap.add_argument("--model", default=None,
-                    help="claude CLI --model (default: your CLI default)")
+                    help="mutator model (default claude-sonnet-5; "
+                         "try claude-opus-4-8 for harder steering)")
     ap.add_argument("--no-open", action="store_true",
                     help="don't auto-open composites")
     args = ap.parse_args()
