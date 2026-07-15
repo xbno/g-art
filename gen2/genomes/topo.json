@@ -1,0 +1,20 @@
+{
+  "name": "topo",
+  "page": {"size": "11x17", "margin_mm": 24},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.25, "blur_mm": 1.6}},
+  "humanize": {"wobble_amp_mm": 0.25, "overshoot_prob": 0.1,
+               "break_per_mm": 0.003},
+  "bands": [
+    {"module": "empty"},
+    {"module": "contour_hatch", "pen": "black03",
+     "params": {"spacing_mm": 2.4}},
+    {"module": "contour_hatch", "pen": "black03",
+     "params": {"spacing_mm": 1.5}},
+    {"module": "contour_hatch", "pen": "black03",
+     "params": {"spacing_mm": 0.9}},
+    {"module": "solid_fill", "pen": "black03",
+     "params": {"spacing_mm": 0.45, "angle_deg": 30}}
+  ],
+  "edges": null
+}

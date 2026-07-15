@@ -1,0 +1,20 @@
+{
+  "name": "blue_mountain",
+  "page": {"size": "11x17", "margin_mm": 24},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.35, "blur_mm": 1.2}},
+  "humanize": {"wobble_amp_mm": 0.18, "overshoot_prob": 0.15},
+  "bands": [
+    {"module": "empty"},
+    {"module": "flow_hatch", "pen": "blue03",
+     "params": {"spacing_mm": 1.9, "fallback_angle_deg": 2,
+                "min_coherence": 0.25}},
+    {"module": "flow_hatch", "pen": "blue03",
+     "params": {"spacing_mm": 1.0, "fallback_angle_deg": 25}},
+    {"module": "flow_hatch", "pen": "black03",
+     "params": {"spacing_mm": 0.8, "fallback_angle_deg": 65}},
+    {"module": "cross_hatch", "pen": "black03",
+     "params": {"spacing_mm": 0.5, "angle_deg": 40, "cross_delta_deg": 65}}
+  ],
+  "edges": null
+}

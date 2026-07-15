@@ -1,0 +1,21 @@
+{
+  "name": "classic_ink",
+  "page": {"size": "11x17", "margin_mm": 22},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.15, "blur_mm": 1.0}},
+  "humanize": {"wobble_amp_mm": 0.22},
+  "bands": [
+    {"module": "empty"},
+    {"module": "flow_hatch", "pen": "black03",
+     "params": {"spacing_mm": 2.2, "fallback_angle_deg": 55}},
+    {"module": "flow_hatch", "pen": "black03",
+     "params": {"spacing_mm": 1.25, "fallback_angle_deg": 55}},
+    {"module": "cross_hatch", "pen": "black03",
+     "params": {"spacing_mm": 1.15, "angle_deg": 48, "cross_delta_deg": 68}},
+    {"module": "solid_fill", "pen": "black03",
+     "params": {"spacing_mm": 0.45, "angle_deg": 48}}
+  ],
+  "edges": {"module": "contour_lines", "pen": "black03",
+            "params": {"min_len_mm": 4.0},
+            "humanize": {"wobble_amp_mm": 0.12, "overshoot_prob": 0.05}}
+}

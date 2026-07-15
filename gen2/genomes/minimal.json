@@ -1,0 +1,19 @@
+{
+  "name": "minimal",
+  "page": {"size": "11x17", "margin_mm": 28},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.5, "blur_mm": 1.8}},
+  "humanize": {"wobble_amp_mm": 0.2, "overshoot_prob": 0.1},
+  "bands": [
+    {"module": "empty"},
+    {"module": "empty"},
+    {"module": "flow_hatch", "pen": "blue03",
+     "params": {"spacing_mm": 1.7, "fallback_angle_deg": 10}},
+    {"module": "empty"},
+    {"module": "solid_fill", "pen": "black03",
+     "params": {"spacing_mm": 0.5, "angle_deg": 55}}
+  ],
+  "edges": {"module": "contour_lines", "pen": "black03",
+            "params": {"min_len_mm": 6.0},
+            "humanize": {"wobble_amp_mm": 0.12, "overshoot_prob": 0.0}}
+}

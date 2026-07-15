@@ -1,0 +1,21 @@
+{
+  "name": "scribble",
+  "page": {"size": "11x17", "margin_mm": 22},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.2, "blur_mm": 1.4}},
+  "humanize": {"wobble_amp_mm": 0.2, "end_jitter_mm": 0.3},
+  "bands": [
+    {"module": "empty"},
+    {"module": "scribble_fill", "pen": "black03",
+     "params": {"spacing_mm": 2.8, "curl": 0.7}},
+    {"module": "scribble_fill", "pen": "black03",
+     "params": {"spacing_mm": 1.5, "curl": 0.9}},
+    {"module": "scribble_fill", "pen": "black03",
+     "params": {"spacing_mm": 0.8, "curl": 1.2}},
+    {"module": "solid_fill", "pen": "black03",
+     "params": {"spacing_mm": 0.42}}
+  ],
+  "edges": {"module": "contour_lines", "pen": "black03",
+            "params": {"min_len_mm": 5.0},
+            "humanize": {"wobble_amp_mm": 0.15}}
+}

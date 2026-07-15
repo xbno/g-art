@@ -1,0 +1,14 @@
+# Pen inventory for the AxiDraw. Edit freely — names are referenced by
+# genomes, so keep names stable once you start evolving.
+
+[black03]
+color = "#1a1a1a"
+width_mm = 0.3
+
+[blue03]
+color = "#2255aa"
+width_mm = 0.3
+
+[black05]
+color = "#111111"
+width_mm = 0.5
