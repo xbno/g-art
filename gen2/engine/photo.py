@@ -81,9 +81,14 @@ def load_structure_ctx(path: str, page_size: str = "letter",
     if p["gamma"] != 1.0:
         g = np.power(g, p["gamma"])
 
-    # tone bands: equal-luminance thresholds warped by band_gamma
+    # tone bands: thresholds warped by band_gamma. Absolute by default;
+    # band_anchor "quantile" derives them from the image's own histogram —
+    # essential for high-key sources (pale engravings) or low-key ones,
+    # where absolute thresholds dump everything into one band.
     n = p["n_bands"]
     edges = np.linspace(0.0, 1.0, n + 1) ** p["band_gamma"]
+    if p.get("band_anchor") == "quantile":
+        edges = np.quantile(g, edges)
     idx = np.clip(np.digitize(g, edges[1:-1]), 0, n - 1)
     # band index 0 must be the LIGHTEST -> invert (high luminance = band 0)
     band_idx = (n - 1) - idx

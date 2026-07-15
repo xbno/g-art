@@ -63,6 +63,11 @@ only when the subject genuinely wants a topographic reading.
   "source": {"type": "photo", "params": {
       "n_bands": 3-7,        # tone bands, band 0 = LIGHTEST
       "band_gamma": 0.7-1.8, # >1 pushes thresholds darker => more bare paper
+      "band_anchor": "quantile",  # optional: derive band thresholds from
+                             # the image's own histogram — use for high-key
+                             # or low-key sources (pale engravings, snow
+                             # scenes) where absolute thresholds dump
+                             # everything into one band
       "blur_mm": 0.3-3.0, "gamma": 0.6-1.6, "clahe_clip": 1-4,
       "tensor_window_mm": 1-6,     # orientation-field smoothing
       "canny_lo": 30-120, "canny_hi": 80-260,
@@ -164,6 +169,11 @@ foreground (bolder pen, denser marks). 2-4 zones is plenty.
   spacing_mm, spacing_jitter, max_rings
 - `scribble_fill` — meandering strokes. spacing_mm, step_mm, curl 0-1.5,
   curl_scale 0.02-0.15, stroke_len_mm 50-400. Loose foliage masses.
+- `curl_fill` — engraver's curls: short scalloped arcs/loops scattered
+  through the region, chords leaning along the orientation field — the
+  vintage cloud/smoke/foliage texture. radius_mm 0.8-2.5, spacing_mm
+  1.5-5, sweep_deg_min/max. Best inside cloud/foliage zones, at lobe
+  shading; pair with a ruled fixed_hatch sky.
 - `solid_fill` — dense back-and-forth reading as solid ink.
   spacing_mm 0.35-0.6, angle_deg
 - `contour_lines` — outline layer from the edge map. min_len_mm

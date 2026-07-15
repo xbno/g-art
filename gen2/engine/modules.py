@@ -135,6 +135,37 @@ def scribble_fill(mask, region, ctx, params, rng) -> list[Polyline]:
     return out
 
 
+def curl_fill(mask, region, ctx, params, rng) -> list[Polyline]:
+    """Engraver's curls: short scalloped arcs and loops scattered through
+    the region — the classic cloud/foliage/smoke texture (see vintage
+    engravings). Arc chords lean along the local orientation field."""
+    page = ctx["page"]
+    radius = _p(params, "radius_mm", 1.4)
+    spacing = _p(params, "spacing_mm", 2.4)   # mean curl separation
+    sweep_lo = _p(params, "sweep_deg_min", 150.0)
+    sweep_hi = _p(params, "sweep_deg_max", 330.0)
+    theta = ctx["orientation"]
+
+    h, w = mask.shape
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        return []
+    area_mm2 = len(xs) * page.mm_per_px ** 2
+    n = int(area_mm2 / max(spacing, 0.3) ** 2)
+    out: list[Polyline] = []
+    for _ in range(min(n, 20000)):
+        i = rng.integers(len(xs))
+        c = page.px_to_mm(np.array([[xs[i] + 0.5, ys[i] + 0.5]], float))[0]
+        r = min(radius * float(rng.lognormal(0, 0.35)), 2.8)  # stay within
+        # the shared overshoot tolerance of the band region
+        base = float(theta[ys[i], xs[i]]) + rng.uniform(-0.5, 0.5)
+        sweep = np.deg2rad(rng.uniform(sweep_lo, sweep_hi))
+        ts = base + np.linspace(0, sweep, max(int(sweep * r / 0.5), 5))
+        arc = c + r * np.column_stack([np.cos(ts), np.sin(ts)])
+        out.append(arc)
+    return out
+
+
 def solid_fill(mask, region, ctx, params, rng) -> list[Polyline]:
     """Dense back-and-forth that reads as solid ink. Ends sit within
     linemerge tolerance so vpype serpentines them into few pen-lifts."""
@@ -289,6 +320,7 @@ MODULES = {
     "patch_hatch": patch_hatch,
     "contour_hatch": contour_hatch,
     "scribble_fill": scribble_fill,
+    "curl_fill": curl_fill,
     "solid_fill": solid_fill,
     "contour_lines": contour_lines,
 }
