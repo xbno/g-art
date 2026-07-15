@@ -28,6 +28,13 @@ DEFAULTS = {
     "tensor_window_mm": 2.5,
     "canny_lo": 60,
     "canny_hi": 160,
+    # region coherence: how tone-band masks consolidate into drawable
+    # shapes. On busy/textured photos raise close_mm and min_area_mm2 so
+    # speckle merges into a few large masses (what a human artist draws).
+    "region": {"close_mm": 0.0,      # merge islands closer than this
+               "open_mm": 0.5,       # then erase specks thinner than this
+               "min_area_mm2": 4.0,  # drop surviving islands smaller
+               "simplify_mm": 0.3},  # boundary smoothing
 }
 
 
@@ -35,6 +42,7 @@ def load_structure_ctx(path: str, page_size: str = "letter",
                        margin_mm: float = 15.0,
                        params: dict | None = None) -> dict:
     p = {**DEFAULTS, **(params or {})}
+    p["region"] = {**DEFAULTS["region"], **(p.get("region") or {})}
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise FileNotFoundError(path)
@@ -92,7 +100,8 @@ def load_structure_ctx(path: str, page_size: str = "letter",
 
     return {"gray": g, "tone_bands": tone_bands, "edge_map": edge_map,
             "orientation": theta.astype(np.float32),
-            "coherence": coherence.astype(np.float32), "page": page}
+            "coherence": coherence.astype(np.float32), "page": page,
+            "region_params": p["region"]}
 
 
 def region_to_mask(region, page: Page, shape: tuple[int, int]) -> np.ndarray:
@@ -116,14 +125,19 @@ def region_to_mask(region, page: Page, shape: tuple[int, int]) -> np.ndarray:
 def mask_to_region(mask: np.ndarray, page: Page,
                    simplify_mm: float = 0.3,
                    min_area_mm2: float = 4.0,
-                   open_mm: float = 0.5):
+                   open_mm: float = 0.5,
+                   close_mm: float = 0.0):
     """Bool mask (working px) -> shapely MultiPolygon in page mm."""
     import shapely
     from shapely.geometry import Polygon
     from shapely.ops import unary_union
 
+    m = mask.astype(np.uint8)
+    if close_mm > 0:  # merge nearby islands into masses BEFORE despeckling
+        kc = max(int(round(close_mm / page.mm_per_px)), 1)
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((kc, kc), np.uint8))
     k = max(int(round(open_mm / page.mm_per_px)), 1)
-    m = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN,
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN,
                          np.ones((k, k), np.uint8))
     contours, hierarchy = cv2.findContours(m, cv2.RETR_CCOMP,
                                            cv2.CHAIN_APPROX_SIMPLE)

@@ -32,6 +32,12 @@ difference carries maximum information about the user's taste — and
    fighting the subject's form — revise its genome and re-render. Iterate
    until BOTH children genuinely pass, up to ~3 renders per child; keep the
    best attempt if the budget runs out.
+   The most common failure on real photos is SPECKLE: busy texture
+   shatters tone bands into thousands of tiny islands, and every module
+   then renders noise (outline noodles, blob confetti). A human artist
+   consolidates a busy texture into a FEW large shapes per tone — reach
+   for `source.params.region` (raise close_mm and min_area_mm2, add
+   blur_mm) before blaming the module choice.
 5. Only then reply with the final JSON. The A/B contrast must survive your
    revisions — two polished-but-identical children carry no information.
 
@@ -45,14 +51,22 @@ difference carries maximum information about the user's taste — and
       "band_gamma": 0.7-1.8, # >1 pushes thresholds darker => more bare paper
       "blur_mm": 0.3-3.0, "gamma": 0.6-1.6, "clahe_clip": 1-4,
       "tensor_window_mm": 1-6,     # orientation-field smoothing
-      "canny_lo": 30-120, "canny_hi": 80-260}},
+      "canny_lo": 30-120, "canny_hi": 80-260,
+      "region": {            # how tone masks consolidate into shapes —
+                             # THE lever against speckle/confetti on busy
+                             # photos (foliage, snow texture, rock detail)
+          "close_mm": 0-5,       # merge islands closer than this first
+          "open_mm": 0.3-3,      # then erase specks thinner than this
+          "min_area_mm2": 4-300, # drop islands smaller than this
+          "simplify_mm": 0.2-1.5}}},  # boundary smoothing
   "humanize": {   # global hand-feel post-pass; per-band override allowed
       "wobble_amp_mm": 0.05-0.5, "wobble_freq": 0.05-0.3,
       "end_jitter_mm": 0-1.5, "overshoot_prob": 0-0.5,
       "overshoot_mm": 0.5-2.5, "break_per_mm": 0-0.02,
       "break_gap_mm": 0.5-2.5},
   "bands": [ {"module": ..., "pen": ..., "params": {...},
-              "humanize": {...optional override}}, ... ],
+              "humanize": {...optional override},
+              "region": {...optional per-band region override}}, ... ],
               # one entry per tone band, index 0 = lightest
   "edges": null | {"module": "contour_lines", "pen": ...,
                    "params": {"min_len_mm": 2-10}, "humanize": {...}}

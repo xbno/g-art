@@ -120,7 +120,7 @@ def main() -> None:
 
         print(f"\ngen {gen} [{temperature}]"
               + (f" steering: {steer}" if steer else "")
-              + " — mutating...")
+              + " — mutating (self-checks its renders; 2-4 min)...")
         try:
             prop = mutator.propose(parent_genome, history, steer=steer,
                                    parent_png=str(parent_png),

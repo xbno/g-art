@@ -9,7 +9,8 @@ Genome schema (v1):
   "bands": [                       # index = tone band, 0 = lightest
     {"module": "empty"},
     {"module": "flow_hatch", "pen": "blue03", "params": {...},
-     "humanize": {...per-band overrides}},
+     "humanize": {...per-band overrides},
+     "region": {...per-band mask_to_region overrides}},
     ...
   ],
   "edges": {"module": "contour_lines", "pen": "black03", "params": {...}}
@@ -58,7 +59,8 @@ def render(genome: dict, seed: int, photo_path: str | None = None):
         name = entry["module"]
         if name == "empty":
             return
-        region = mask_to_region(mask, page)
+        rp = {**ctx.get("region_params", {}), **entry.get("region", {})}
+        region = mask_to_region(mask, page, **rp)
         if region.is_empty:
             return
         mask = region_to_mask(region, page, mask.shape)
