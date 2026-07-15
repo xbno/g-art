@@ -1,0 +1,29 @@
+{
+  "name": "pen_ink",
+  "page": {"size": "11x17", "margin_mm": 24},
+  "source": {"type": "photo",
+             "params": {"n_bands": 5, "band_gamma": 1.3, "blur_mm": 1.6,
+                        "region": {"close_mm": 2.0, "open_mm": 0.8,
+                                   "min_area_mm2": 40, "simplify_mm": 0.5}}},
+  "humanize": {"wobble_amp_mm": 0.16, "overshoot_prob": 0.12,
+               "break_per_mm": 0.003},
+  "bands": [
+    {"module": "empty"},
+    {"module": "patch_hatch", "pen": "blue03",
+     "params": {"spacing_mm": 1.9, "snap_deg": 30, "patch_gap_mm": 0.6,
+                "fallback_angle_deg": 0}},
+    {"module": "patch_hatch", "pen": "blue03",
+     "params": {"spacing_mm": 1.1, "snap_deg": 30, "patch_gap_mm": 0.5,
+                "fallback_angle_deg": 55}},
+    {"module": "patch_hatch", "pen": "black03",
+     "params": {"spacing_mm": 0.95, "snap_deg": 30, "patch_gap_mm": 0.4,
+                "cross_delta_deg": 62, "fallback_angle_deg": 55}},
+    {"module": "patch_hatch", "pen": "black05",
+     "params": {"spacing_mm": 0.7, "snap_deg": 30, "patch_gap_mm": 0.3,
+                "cross_delta_deg": 70, "cross_spacing_scale": 0.9,
+                "fallback_angle_deg": 48}}
+  ],
+  "edges": {"module": "contour_lines", "pen": "black03",
+            "params": {"min_len_mm": 6.0},
+            "humanize": {"wobble_amp_mm": 0.1, "overshoot_prob": 0.05}}
+}

@@ -145,6 +145,54 @@ def solid_fill(mask, region, ctx, params, rng) -> list[Polyline]:
         spacing_jitter=_p(params, "spacing_jitter", 0.08))
 
 
+def patch_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
+    """Classic pen-and-ink facet hatching. Segments the band into
+    orientation-coherent patches (surface planes); each patch is filled
+    with STRAIGHT parallel lines at its own angle — optionally snapped to
+    a limited angle vocabulary — with white seams between patches and an
+    optional cross pass. The core move of the reference style."""
+    from .patches import segment_facets
+    from .photo import mask_to_region
+
+    page = ctx["page"]
+    spacing = _p(params, "spacing_mm", 1.1)
+    sjit = _p(params, "spacing_jitter", 0.12)
+    offset = _p(params, "angle_offset_deg", 0.0)
+    jitter = _p(params, "angle_jitter_deg", 5.0)
+    snap = _p(params, "snap_deg", 0.0)          # e.g. 30 -> angle vocabulary
+    gap = _p(params, "patch_gap_mm", 0.4)       # white seam between patches
+    fallback = _p(params, "fallback_angle_deg", 52.0)
+    cross_delta = _p(params, "cross_delta_deg", 0.0)  # >0 adds second pass
+    out: list[Polyline] = []
+    facets = segment_facets(
+        mask, ctx,
+        sector_deg=_p(params, "sector_deg", 30.0),
+        smooth_mm=_p(params, "smooth_mm", 2.5),
+        min_coherence=_p(params, "min_coherence", 0.06))
+    for fmask, ang, incoherent in facets:
+        sub = mask_to_region(fmask, page,
+                             min_area_mm2=_p(params, "min_patch_mm2", 25.0),
+                             open_mm=0.8, simplify_mm=0.4)
+        if sub.is_empty:
+            continue
+        base = fallback if incoherent else np.degrees(ang) + offset
+        if snap > 0:
+            base = round(base / snap) * snap
+        for poly in getattr(sub, "geoms", [sub]):
+            if gap > 0:
+                poly = poly.buffer(-gap / 2)
+            if poly.is_empty:
+                continue
+            a = base + rng.uniform(-jitter, jitter)
+            out += _parallel_lines(poly, a, spacing, rng, sjit)
+            if cross_delta > 0:
+                out += _parallel_lines(
+                    poly, a + cross_delta,
+                    spacing * _p(params, "cross_spacing_scale", 1.15),
+                    rng, sjit)
+    return out
+
+
 def contour_lines(mask, region, ctx, params, rng) -> list[Polyline]:
     """Outline layer traced from the edge map. `mask` selects where edges
     are kept (pass the full-page mask for a global outline layer)."""
@@ -169,6 +217,7 @@ MODULES = {
     "fixed_hatch": fixed_hatch,
     "cross_hatch": cross_hatch,
     "flow_hatch": flow_hatch,
+    "patch_hatch": patch_hatch,
     "contour_hatch": contour_hatch,
     "scribble_fill": scribble_fill,
     "solid_fill": solid_fill,

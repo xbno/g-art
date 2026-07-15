@@ -67,10 +67,11 @@ class CliMutator:
     """Tier 1 genome mutation via `claude -p /mutate-genome`, with vision."""
 
     def __init__(self, model: str | None = None,
-                 payload_dir: Path | None = None):
+                 payload_dir: Path | None = None, renders: int = 3):
         if not shutil.which("claude"):
             raise FileNotFoundError("claude CLI not on PATH")
         self.model = model or MODEL
+        self.renders = max(renders, 2)
         self.payload_dir = payload_dir or Path(tempfile.mkdtemp(
             prefix="mutate_"))
 
@@ -91,7 +92,11 @@ class CliMutator:
             "photo": photo,
             "seed": seed,
             "workdir": str(workdir),
+            "render_budget": self.renders,
             "pens": pen_names(),
+            "style_refs": sorted(
+                str(p) for p in
+                (HERE / "examples" / "pen_and_ink").glob("*.png"))[:4],
             "gate_feedback": None,
         }
         for attempt in range(2):
@@ -134,7 +139,8 @@ class RandomMutator:
     """No-CLI fallback: seeded structural/param perturbations."""
 
     STRUCTURAL_MODULES = ["empty", "fixed_hatch", "cross_hatch", "flow_hatch",
-                          "contour_hatch", "scribble_fill", "solid_fill"]
+                          "patch_hatch", "contour_hatch", "scribble_fill",
+                          "solid_fill"]
 
     def __init__(self, seed: int | None = None):
         self.rng = np.random.default_rng(seed)
@@ -178,11 +184,12 @@ class RandomMutator:
 
 def make_mutator(force_random: bool = False, seed: int | None = None,
                  model: str | None = None,
-                 payload_dir: Path | None = None):
+                 payload_dir: Path | None = None, renders: int = 3):
     """Claude Code CLI if on PATH; else degrade to random mutations."""
     if not force_random:
         try:
-            return CliMutator(model=model, payload_dir=payload_dir)
+            return CliMutator(model=model, payload_dir=payload_dir,
+                              renders=renders)
         except FileNotFoundError as e:
             log.warning("%s; falling back to random mutations", e)
     return RandomMutator(seed)

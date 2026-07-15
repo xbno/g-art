@@ -75,6 +75,9 @@ def main() -> None:
     ap.add_argument("--model", default=None,
                     help="mutator model (default claude-sonnet-5; "
                          "try claude-opus-4-8 for harder steering)")
+    ap.add_argument("--renders", type=int, default=3,
+                    help="mutator render budget per generation: it renders "
+                         "this many candidates and returns the best 2")
     ap.add_argument("--no-open", action="store_true",
                     help="don't auto-open composites")
     args = ap.parse_args()
@@ -102,7 +105,7 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"run {run_id} → {run_dir}")
     mutator = make_mutator(force_random=args.random, seed=args.seed,
-                           model=args.model,
+                           model=args.model, renders=args.renders,
                            payload_dir=run_dir / "payloads")
 
     parent_png = render_thumb(parent_genome, seed, args.photo,
