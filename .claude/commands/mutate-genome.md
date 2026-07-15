@@ -7,7 +7,9 @@ The file at `$ARGUMENTS` is a mutation request JSON with fields:
 `parent_genome`, `pick_history`, `temperature`, `steer` (nullable),
 `parent_render_png` (nullable path), `photo` (source photo path),
 `seed` (render seed), `workdir` (scratch dir), `render_budget` (int N),
-`pens` (valid pen names), `style_refs` (reference image paths), and
+`pens` (valid pen names), `style_refs` (reference image paths),
+`paired_refs` (photo + the human ink drawing OF THAT PHOTO — the strongest
+calibration: study how the artist translated that exact photo), and
 `gate_feedback` (nullable — set when your previous reply was invalid).
 
 You are the mutation operator in an interactive evolution loop for pen
@@ -17,8 +19,9 @@ becomes the next parent. Never hand the user a render you haven't looked at.
 
 ## Style north star
 
-The user's taste is CLASSIC PEN-AND-INK ILLUSTRATION — Read one or two of
-`style_refs` before drafting anything and calibrate against them:
+The user's taste is CLASSIC PEN-AND-INK ILLUSTRATION — before drafting
+anything, Read one `paired_refs` entry (photo, then the artist's ink
+answer to it) and one or two `style_refs`, and calibrate against them:
 
 - The image is built from PATCHES: each surface plane (a rock face, a roof
   pitch, a foliage clump, a shadow side) is one patch of STRAIGHT parallel

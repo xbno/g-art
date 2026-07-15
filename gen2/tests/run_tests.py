@@ -1,8 +1,12 @@
-"""Smoke + golden tests. Run: ../.venv/bin/python tests/run_tests.py
+"""Smoke + golden + benchmark tests. Run: ../.venv/bin/python tests/run_tests.py
 
 1. Module smoke: every registered module renders a synthetic band without
    NaNs, stays within the region bbox (+ tolerance), returns valid polylines.
 2. Golden: render(genome, seed) twice -> identical polylines (purity).
+3. Real-photo benchmark: every preset genome renders against real photos.
+4. Pair benchmark: fixtures include (photo, human ink drawing) pairs of the
+   SAME composition — renders are scored on whether they put ink where the
+   artist did (density correlation, ink budget, bare paper).
 """
 
 import json
@@ -19,13 +23,15 @@ from engine.modules import MODULES                            # noqa: E402
 from engine.render import render                              # noqa: E402
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "landscape.png")
-# snow_trees_src / mountain_peaks_src are real photographs; the other
-# *_src fixtures are photos OF human pen-and-ink drawings, so they inherit
-# hand-drawn quality for free. Renders of the real photos are the honest
-# quality benchmark — previews land in runs/tests/ for eyeball comparison
-# against the rubric.
-REAL_PHOTOS = [str(Path(__file__).parent / "fixtures" / f"{n}.png")
+# All *_src fixtures are real photographs. mountain/peak additionally have
+# a matching *_ink fixture: a human pen-and-ink drawing of the SAME
+# composition — ground truth for the pair benchmark below.
+FIXDIR = Path(__file__).parent / "fixtures"
+REAL_PHOTOS = [str(FIXDIR / f"{n}.png")
                for n in ("snow_trees_src", "mountain_peaks_src")]
+PAIRS = [("mountain_src.png", "mountain_ink.png"),
+         ("peak_src.png", "peak_ink.png")]
+PAIR_GENOMES = ("pen_ink", "classic_ink")
 OVERSHOOT_TOL = 3.0  # mm; humanization overshoot allowance
 
 
@@ -90,6 +96,54 @@ def real_photo() -> None:
                   f"{n:5d} lines → {png.name}")
 
 
+def _ink_density(png: Path, grid_w: int = 40) -> "np.ndarray":
+    """Content-cropped, coarse ink-density grid (0 = paper, 1 = solid)."""
+    import cv2
+    g = cv2.imread(str(png), cv2.IMREAD_GRAYSCALE).astype(np.float32)
+    paper = max(float(np.percentile(g, 95)), 1.0)
+    ink = np.clip((paper - g) / paper, 0.0, 1.0)
+    ys, xs = np.nonzero(ink > 0.12)   # crop page margins / paper border
+    ink = ink[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    gh = max(int(round(grid_w * ink.shape[0] / ink.shape[1])), 8)
+    return cv2.resize(ink, (grid_w, gh), interpolation=cv2.INTER_AREA)
+
+
+def pairs() -> None:
+    """Score genome renders against the paired human ink drawings: does
+    the render put ink where the artist did? Soft floors only — the
+    printed scorecard is the real product; watch it climb."""
+    import cv2
+    import tempfile
+    import tomllib
+    from engine.svgout import render_png, write_svg
+    root = Path(__file__).parent.parent
+    pens = tomllib.loads((root / "pens.toml").read_text())
+    out_dir = root / "runs" / "tests"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for src, ink in PAIRS:
+        human = _ink_density(FIXDIR / ink)
+        for gname in PAIR_GENOMES:
+            genome = json.loads(
+                (root / "genomes" / f"{gname}.json").read_text())
+            layers, page = render(genome, 42,
+                                  photo_path=str(FIXDIR / src))
+            png = out_dir / f"{gname}_{Path(src).stem}_s42.png"
+            with tempfile.NamedTemporaryFile(suffix=".svg") as tf:
+                write_svg(layers, pens, page, tf.name)
+                render_png(tf.name, str(png), width_px=1100)
+            d = _ink_density(png)
+            d = cv2.resize(d, (human.shape[1], human.shape[0]))
+            corr = float(np.corrcoef(d.ravel(), human.ravel())[0, 1])
+            ratio = float(d.mean() / max(human.mean(), 1e-6))
+            paper_h = float((human < 0.06).mean())
+            paper_r = float((d < 0.06).mean())
+            print(f"  pair {Path(src).stem:9s} x {gname:12s} "
+                  f"corr {corr:+.2f}  ink x{ratio:.2f}  "
+                  f"paper {paper_r:.0%} (artist {paper_h:.0%})")
+            assert corr > 0.15, f"{gname}/{src}: ink placement corr {corr}"
+            assert 0.2 < ratio < 5.0, f"{gname}/{src}: ink budget x{ratio}"
+
+
 if __name__ == "__main__":
     print("module smoke tests:")
     smoke()
@@ -97,6 +151,8 @@ if __name__ == "__main__":
     golden()
     print("real-photo benchmark:")
     real_photo()
+    print("pair benchmark (render vs human ink, same photo):")
+    pairs()
     import test_evolve
     print("evolve tests:")
     test_evolve.store_roundtrip()

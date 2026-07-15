@@ -97,6 +97,10 @@ class CliMutator:
             "style_refs": sorted(
                 str(p) for p in
                 (HERE / "examples" / "pen_and_ink").glob("*.png"))[:4],
+            "paired_refs": [
+                {"photo": str(HERE / "tests/fixtures" / f"{n}_src.png"),
+                 "ink": str(HERE / "tests/fixtures" / f"{n}_ink.png")}
+                for n in ("mountain", "peak")],
             "gate_feedback": None,
         }
         for attempt in range(2):
