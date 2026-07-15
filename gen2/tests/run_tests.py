@@ -63,4 +63,9 @@ if __name__ == "__main__":
     smoke()
     print("golden test:")
     golden()
+    import test_evolve
+    print("evolve tests:")
+    test_evolve.store_roundtrip()
+    test_evolve.mutator_validity()
+    test_evolve.one_generation()
     print("ALL PASS")
