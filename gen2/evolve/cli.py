@@ -21,7 +21,6 @@ import logging
 import subprocess
 import sys
 import tempfile
-import tomllib
 from pathlib import Path
 
 import cv2
@@ -29,24 +28,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engine.render import render                       # noqa: E402
-from engine.svgout import render_png, write_svg        # noqa: E402
 from evolve.mutator import RandomMutator, make_mutator  # noqa: E402
+from evolve.preview import render_thumb                # noqa: E402
 from evolve.store import Store                         # noqa: E402
 
 HERE = Path(__file__).parent.parent
 log = logging.getLogger("evolve")
-
-
-def render_thumb(genome: dict, seed: int, photo: str,
-                 out_png: Path, width_px: int = 850) -> Path:
-    """Fast preview render: no vpype, straight to PNG."""
-    layers, page = render(genome, seed, photo_path=photo)
-    pens = tomllib.loads((HERE / "pens.toml").read_text())
-    with tempfile.NamedTemporaryFile(suffix=".svg") as tf:
-        write_svg(layers, pens, page, tf.name)
-        render_png(tf.name, str(out_png), width_px=width_px)
-    return out_png
 
 
 def composite(a_png: Path, b_png: Path, out: Path) -> None:
@@ -136,7 +123,8 @@ def main() -> None:
         try:
             prop = mutator.propose(parent_genome, history, steer=steer,
                                    parent_png=str(parent_png),
-                                   temperature=temperature)
+                                   temperature=temperature,
+                                   photo=args.photo, seed=seed)
         except Exception as e:
             log.warning("mutator failed (%s); random fallback this gen", e)
             prop = RandomMutator(seed + gen).propose(

@@ -31,7 +31,9 @@ log = logging.getLogger(__name__)
 
 HERE = Path(__file__).parent.parent      # gen2/
 REPO_ROOT = HERE.parent                  # g-art/ (where .claude/commands is)
-CLI_TIMEOUT = 600
+CLI_TIMEOUT = 1800  # the command renders + inspects its own candidates
+ALLOWED_TOOLS = ("Read,Write,"
+                 "Bash(.venv/bin/python gen2/evolve/preview.py:*)")
 
 
 def pen_names() -> list[str]:
@@ -73,13 +75,20 @@ class CliMutator:
     def propose(self, parent: dict, history: list[dict],
                 steer: str | None = None,
                 parent_png: str | None = None,
-                temperature: str = "explore") -> dict:
+                temperature: str = "explore",
+                photo: str | None = None,
+                seed: int | None = None) -> dict:
+        workdir = self.payload_dir / f"work_{os.getpid()}"
+        workdir.mkdir(parents=True, exist_ok=True)
         payload = {
             "parent_genome": parent,
             "pick_history": history[-8:],
             "temperature": temperature,
             "steer": steer,
             "parent_render_png": parent_png,
+            "photo": photo,
+            "seed": seed,
+            "workdir": str(workdir),
             "pens": pen_names(),
             "gate_feedback": None,
         }
@@ -99,7 +108,7 @@ class CliMutator:
         path = self.payload_dir / f"req_{os.getpid()}_{attempt}.json"
         path.write_text(json.dumps(payload, sort_keys=True))
         cmd = ["claude", "-p", f"/mutate-genome {path}",
-               "--output-format", "json", "--allowedTools", "Read",
+               "--output-format", "json", "--allowedTools", ALLOWED_TOOLS,
                "--strict-mcp-config"]
         if self.model:
             cmd += ["--model", self.model]
@@ -113,10 +122,12 @@ class CliMutator:
             raise RuntimeError(f"claude CLI exit {proc.returncode}: "
                                f"{(proc.stderr or proc.stdout)[:300]}")
         outer = json.loads(proc.stdout)
-        log.info("  mutator: %.0fs, $%.3f API-equiv",
+        out = _extract_json(outer["result"])
+        log.info("  mutator: %.0fs, %s self-renders, $%.3f API-equiv",
                  outer.get("duration_ms", 0) / 1000,
+                 out.get("renders", "?"),
                  outer.get("total_cost_usd") or 0)
-        return _extract_json(outer["result"])
+        return out
 
 
 class RandomMutator:
@@ -131,7 +142,9 @@ class RandomMutator:
     def propose(self, parent: dict, history: list[dict],
                 steer: str | None = None,
                 parent_png: str | None = None,
-                temperature: str = "explore") -> dict:
+                temperature: str = "explore",
+                photo: str | None = None,
+                seed: int | None = None) -> dict:
         return {"rationale": f"random {temperature} mutation (no claude CLI)",
                 "child_a": self._mutate(parent, temperature),
                 "child_b": self._mutate(parent, temperature)}

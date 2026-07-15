@@ -1,20 +1,39 @@
 ---
-description: Hatchwork evolution mutator — propose child genomes A/B from a parent (gen2)
-allowed-tools: Read
+description: Hatchwork evolution mutator — propose, render, and self-check child genomes A/B (gen2)
+allowed-tools: Read, Write, Bash(.venv/bin/python gen2/evolve/preview.py:*)
 ---
 
 The file at `$ARGUMENTS` is a mutation request JSON with fields:
 `parent_genome`, `pick_history`, `temperature`, `steer` (nullable),
-`parent_render_png` (nullable path), `pens` (valid pen names), and
-`gate_feedback` (nullable — set when your previous reply was invalid).
-Read it first. If `parent_render_png` is set, Read that image too — it is
-the render of the parent genome; judge it visually before mutating.
+`parent_render_png` (nullable path), `photo` (source photo path),
+`seed` (render seed), `workdir` (scratch dir for your candidates),
+`pens` (valid pen names), and `gate_feedback` (nullable — set when your
+previous reply was invalid). Read it first. If `parent_render_png` is set,
+Read that image — it is the render of the parent genome; judge it visually
+before mutating. Read `photo` too so you know the subject matter.
 
 You are the mutation operator in an interactive evolution loop for pen
 plotter art (AxiDraw, real pens on real paper). Each generation the user is
 shown two candidate renders, A and B, and taps the better one; the winner
 becomes the next parent. Your job: propose child genomes A and B whose
-difference carries maximum information about the user's taste.
+difference carries maximum information about the user's taste — and
+**never hand the user a render you haven't looked at yourself**.
+
+## Workflow (required)
+
+1. Read the payload, the parent render, and the source photo.
+2. Draft child_a and child_b per the mutation policy below.
+3. For each child: write the genome to `<workdir>/child_X.json`, then render
+   it:
+   `.venv/bin/python gen2/evolve/preview.py <workdir>/child_X.json <photo> <seed> <workdir>/child_X.png`
+   and Read the PNG.
+4. Score what you see against the rubric. If a child fails — muddy tone
+   separation, wallpaper texture, dead-black mass, empty nothing, lines
+   fighting the subject's form — revise its genome and re-render. Iterate
+   until BOTH children genuinely pass, up to ~3 renders per child; keep the
+   best attempt if the budget runs out.
+5. Only then reply with the final JSON. The A/B contrast must survive your
+   revisions — two polished-but-identical children carry no information.
 
 ## Genome schema
 ```
@@ -59,10 +78,14 @@ difference carries maximum information about the user's taste.
 
 Every `pen` field must be one of the names in the payload's `pens` list.
 
-## Quality rubric (what a good render looks like)
+## Quality rubric (score each render honestly, 0-2 per line)
 - lines follow form where the genome says so, not one global angle
 - ≥4 distinguishable tone treatments; darkest near-solid, lightest bare paper
-- genuine negative space; ragged human endings; cross-hatch reads intentional
+- genuine negative space — some of the page must breathe
+- no two adjacent lines perfectly parallel and evenly spaced under zoom
+- cross-hatching only where assigned; offset angle reads intentional
+- thumbnail test: does it read as hand-inked at arm's length?
+- the subject is recognizable; texture serves the image, not wallpaper
 
 ## Mutation policy
 - A and B must differ MEANINGFULLY from each other and from the parent —
@@ -80,6 +103,7 @@ Every `pen` field must be one of the names in the payload's `pens` list.
   stated reason; fix exactly that.
 
 Your FINAL message must be ONLY a single JSON object — no markdown fences,
-no prose before or after:
+no prose before or after. `child_a`/`child_b` are the FINAL revised genomes
+(matching the last rendered child_X.json exactly):
 
-{"rationale": "<=2 sentences on the A/B contrast", "child_a": {...full genome...}, "child_b": {...full genome...}}
+{"rationale": "<=2 sentences on the A/B contrast", "renders": <int total renders you made>, "child_a": {...full genome...}, "child_b": {...full genome...}}

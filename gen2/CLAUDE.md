@@ -29,13 +29,16 @@ contract — nothing may depend on the plotter itself). Plot workflow:
 
 - `engine/` — page, geom, photo (source → structure_ctx), hatch (modules),
   humanize, svgout. Modules consume `structure_ctx`, never the photo.
-- `evolve/` — M2 loop: store (SQLite tree), mutator, cli
+- `evolve/` — M2 loop: store (SQLite tree), mutator, preview, cli
   (`python -m evolve.cli <photo>`). The mutator shells out to
   `claude -p "/mutate-genome <payload>"` (command:
   repo-root `.claude/commands/mutate-genome.md`) — subscription-billed, NOT
   the Anthropic SDK; ANTHROPIC_API_KEY is stripped from the subprocess env
-  so it can't silently bill the API. Degrades to a seeded RandomMutator
-  when the claude CLI is absent (or `--random`).
+  so it can't silently bill the API. The command SELF-CHECKS: it renders
+  its own candidates via `evolve/preview.py`, views the PNGs, and revises
+  until both pass the rubric — never show the user an unseen render.
+  Degrades to a seeded RandomMutator when the claude CLI is absent
+  (or `--random`).
 - `m0.py` — M0 CLI: photo → banded fixed-angle hatch → humanize → layered SVG.
 - `pens.toml` — pen inventory; genome layers reference pen names.
 - `tests/fixtures/` — synthetic + cropped test sources (`make_fixture.py`).
