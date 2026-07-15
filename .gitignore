@@ -1,3 +1,6 @@
 .venv
 *.svg
 *.png
+# test fixtures and style references are inputs, not outputs — keep them
+!gen2/tests/fixtures/*.png
+!gen2/examples/**/*.png
