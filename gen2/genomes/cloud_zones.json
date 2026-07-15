@@ -1,0 +1,46 @@
+{
+  "name": "cloud_zones",
+  "page": {"size": "11x17", "margin_mm": 24},
+  "source": {"type": "photo",
+             "params": {"n_bands": 4, "band_anchor": "quantile",
+                        "band_gamma": 1.0, "clahe_clip": 0, "blur_mm": 1.2,
+                        "tensor_window_mm": 3.5,
+                        "region": {"close_mm": 2.0, "open_mm": 0.6,
+                                   "min_area_mm2": 20, "simplify_mm": 0.4}}},
+  "humanize": {"wobble_amp_mm": 0.14, "overshoot_prob": 0.05,
+               "break_per_mm": 0.001},
+  "zones": [
+    {"name": "ruled_sky",
+     "select": {"type": "hsv", "coherence": [0.25, 1.0],
+                "orient_deg": [160, 20], "smooth_mm": 4.0},
+     "bands": [
+       {"module": "empty"},
+       {"module": "fixed_hatch", "pen": "blue03",
+        "params": {"angle_deg": 0, "spacing_mm": 0.8,
+                   "spacing_jitter": 0.05},
+        "tone_mod": {"low": 0.02, "high": 0.2, "seg_mm": 8.0}},
+       {"module": "fixed_hatch", "pen": "blue03",
+        "params": {"angle_deg": 0, "spacing_mm": 0.65,
+                   "spacing_jitter": 0.05}},
+       {"module": "fixed_hatch", "pen": "black03",
+        "params": {"angle_deg": 0, "spacing_mm": 0.6,
+                   "spacing_jitter": 0.05}}
+     ],
+     "edges": null},
+    {"name": "clouds", "select": {"type": "rest"},
+     "bands": [
+       {"module": "empty"},
+       {"module": "curl_fill", "pen": "blue03",
+        "params": {"radius_mm": 1.2, "spacing_mm": 3.5}},
+       {"module": "curl_fill", "pen": "blue03",
+        "params": {"radius_mm": 1.0, "spacing_mm": 2.2}},
+       {"module": "contour_hatch", "pen": "black03",
+        "params": {"spacing_mm": 0.8, "spacing_jitter": 0.25},
+        "tone_mod": {"low": 0.08, "high": 0.45, "seg_mm": 2.5}}
+     ],
+     "edges": {"module": "contour_lines", "pen": "blue03",
+               "params": {"min_len_mm": 5.0},
+               "humanize": {"wobble_amp_mm": 0.15,
+                            "overshoot_prob": 0.0}}}
+  ]
+}

@@ -38,6 +38,14 @@ def zone_mask(select: dict, ctx: dict) -> np.ndarray:
             lo, hi = select["y"]
             ys = np.linspace(0.0, 1.0, h)[:, None]
             m &= (ys >= lo) & (ys <= hi)
+        if "coherence" in select:  # structure-tensor anisotropy 0-1:
+            lo, hi = select["coherence"]  # high = strongly directional
+            m &= (ctx["coherence"] >= lo) & (ctx["coherence"] <= hi)
+        if "orient_deg" in select:  # local structure direction, mod 180
+            lo, hi = select["orient_deg"]
+            deg = np.degrees(np.mod(ctx["orientation"], np.pi))
+            m &= ((deg >= lo) & (deg <= hi)) if lo <= hi \
+                else ((deg >= lo) | (deg <= hi))
         page = ctx["page"]
         if "max_edge_density" in select:
             # texture cue: sky/haze is smooth, snow faces and foliage are

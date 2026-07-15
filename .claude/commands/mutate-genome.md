@@ -119,6 +119,9 @@ Zones claim pixels in order; end with a `rest` zone for everything else.
       "max_edge_density": 0-0.15,  # texture cue: keep only SMOOTH areas —
                                    # separates sky from same-colored
                                    # textured snow/foliage
+      "coherence": [lo, hi],  # 0-1 directionality: high = ruled/hatched
+                              # strata, low = chaotic texture (curls)
+      "orient_deg": [lo, hi], # local structure direction mod 180
       "top_connected": true,  # keep only components touching the frame top
       "smooth_mm": 1-5},
    "bands": [...], "edges": null},

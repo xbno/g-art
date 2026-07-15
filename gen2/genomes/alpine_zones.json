@@ -41,11 +41,10 @@
        {"module": "fan_hatch", "pen": "blue03",
         "params": {"pivot": [0.42, 0.12], "spacing_mm": 0.75},
         "tone_mod": {"low": 0.1, "high": 0.5, "seg_mm": 3.0}},
-       {"module": "fan_hatch", "pen": "black03",
-        "params": {"pivot": [0.42, 0.12], "spacing_mm": 0.7}},
-       {"module": "patch_hatch", "pen": "black05",
-        "params": {"spacing_mm": 0.55, "snap_deg": 30, "patch_gap_mm": 0.3,
-                   "cross_delta_deg": 65, "fallback_angle_deg": 48}}
+       {"module": "shingle_hatch", "pen": "black03",
+        "params": {"swatch_mm": 9, "spacing_mm": 0.6, "overlap": 0.5}},
+       {"module": "shingle_hatch", "pen": "black05",
+        "params": {"swatch_mm": 7, "spacing_mm": 0.5, "overlap": 0.55}}
      ],
      "edges": {"module": "contour_lines", "pen": "black03",
                "params": {"min_len_mm": 6.0},
