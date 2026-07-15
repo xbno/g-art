@@ -7,7 +7,7 @@ Each generation renders A and B (same seed, different genomes), writes a
 side-by-side composite PNG, and reads one command from the terminal:
 
     a / b        pick the winner (becomes next parent)
-    x            both bad (mutator reheats, jumps structurally)
+    x [why]      both bad (+ optional words; mutator reheats structurally)
     s <text>     steer: prompt the mutator, then re-propose
     p <name>     pin the current parent as a named style
     r            reroll seed (explicit siblings, per seed discipline)
@@ -161,9 +161,11 @@ def main() -> None:
                                 "note": prop["rationale"]})
                 pick_streak, bad_streak = pick_streak + 1, 0
                 break
-            if cmd == "x":
+            if cmd == "x" or cmd.startswith("x "):
+                why = cmd[1:].strip()
                 history.append({"generation": gen, "outcome": "both_bad",
-                                "note": prop["rationale"]})
+                                "note": f"user: {why}" if why
+                                else prop["rationale"]})
                 bad_streak, pick_streak = bad_streak + 1, 0
                 break
             if cmd.startswith("s "):

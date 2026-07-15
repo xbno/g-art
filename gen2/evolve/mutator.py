@@ -98,9 +98,10 @@ class CliMutator:
                 str(p) for p in
                 (HERE / "examples" / "pen_and_ink").glob("*.png"))[:4],
             "paired_refs": [
-                {"photo": str(HERE / "tests/fixtures" / f"{n}_src.png"),
-                 "ink": str(HERE / "tests/fixtures" / f"{n}_ink.png")}
-                for n in ("mountain", "peak")],
+                {"photo": str(p)[:-8] + "_src.png", "ink": str(p)}
+                for p in sorted(
+                    (HERE / "tests/fixtures").glob("*_ink.png"))
+                if p.with_name(p.name[:-8] + "_src.png").exists()],
             "gate_feedback": None,
         }
         for attempt in range(2):

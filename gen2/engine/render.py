@@ -27,6 +27,7 @@ import numpy as np
 from .humanize import humanize
 from .modules import MODULES
 from .photo import load_structure_ctx, mask_to_region, region_to_mask
+from .tonemod import tone_gate
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,10 @@ def render(genome: dict, seed: int, photo_path: str | None = None):
         mask = region_to_mask(region, page, mask.shape)
         rng = np.random.default_rng([seed, band_i])
         lines = MODULES[name](mask, region, ctx, entry.get("params", {}), rng)
+        tm = entry.get("tone_mod")
+        if tm is not None:
+            lines = tone_gate(lines, ctx, tm,
+                              np.random.default_rng([seed, band_i, 7]))
         hp = {**genome.get("humanize", {}), **entry.get("humanize", {})}
         lines = humanize(lines, seed * 1000 + band_i, hp)
         log.info("band %s %s: %d lines", band_i, name, len(lines))

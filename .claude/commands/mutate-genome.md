@@ -79,8 +79,18 @@ only when the subject genuinely wants a topographic reading.
       "break_gap_mm": 0.5-2.5},
   "bands": [ {"module": ..., "pen": ..., "params": {...},
               "humanize": {...optional override},
-              "region": {...optional per-band region override}}, ... ],
+              "region": {...optional per-band region override},
+              "tone_mod": {...optional, see below}}, ... ],
               # one entry per tone band, index 0 = lightest
+  # tone_mod = CONTINUOUS tone within a band (the references' breathing
+  # skies and smooth slope shading). After the module draws, line chunks
+  # are kept by local photo darkness: solid in darks, pen lifts in lights,
+  # dithered dashes in between. Kills visible band seams — the artist
+  # look is few WIDE bands + tone_mod, not many uniform bands.
+  #   {"low": 0-0.3,     # darkness below this -> bare paper
+  #    "high": 0.3-0.8,  # darkness above this -> unbroken strokes
+  #    "seg_mm": 1-5,    # dash grain
+  #    "gamma": 0.6-1.6} # >1 lighter overall
   "edges": null | {"module": "contour_lines", "pen": ...,
                    "params": {"min_len_mm": 2-10}, "humanize": {...}}
 }

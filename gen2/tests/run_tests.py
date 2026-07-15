@@ -23,14 +23,20 @@ from engine.modules import MODULES                            # noqa: E402
 from engine.render import render                              # noqa: E402
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "landscape.png")
-# All *_src fixtures are real photographs. mountain/peak additionally have
-# a matching *_ink fixture: a human pen-and-ink drawing of the SAME
-# composition — ground truth for the pair benchmark below.
+# All *_src fixtures are realistic photographs. mountain/peak additionally
+# have a matching *_ink fixture of the SAME composition — ground truth for
+# the pair benchmark below. Provenance note: the ink drawings are the
+# originals; their *_src photos were AI-generated FROM them (Grok), so
+# compositions match by construction but the photos are tonally cleaner
+# than wild shots — snow_trees/mountain_peaks stay as the unpaired
+# wild-photo stress tests.
 FIXDIR = Path(__file__).parent / "fixtures"
 REAL_PHOTOS = [str(FIXDIR / f"{n}.png")
                for n in ("snow_trees_src", "mountain_peaks_src")]
-PAIRS = [("mountain_src.png", "mountain_ink.png"),
-         ("peak_src.png", "peak_ink.png")]
+# auto-discovered: every *_ink.png with a matching *_src.png is a pair
+PAIRS = sorted((f"{p.stem[:-4]}_src.png", p.name)
+               for p in FIXDIR.glob("*_ink.png")
+               if (FIXDIR / f"{p.stem[:-4]}_src.png").exists())
 PAIR_GENOMES = ("pen_ink", "classic_ink")
 OVERSHOOT_TOL = 3.0  # mm; humanization overshoot allowance
 
