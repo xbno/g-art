@@ -13,7 +13,12 @@ Genome schema (v1):
      "region": {...per-band mask_to_region overrides}},
     ...
   ],
-  "edges": {"module": "contour_lines", "pen": "black03", "params": {...}}
+  "edges": {"module": "contour_lines", "pen": "black03", "params": {...}},
+  "zones": [                       # optional; replaces top-level bands/edges
+    {"name": "sky", "select": {"type": "hsv"|"poly", ...},  # zones.py
+     "bands": [...], "edges": null},
+    {"name": "rest", "select": {"type": "rest"}, "bands": [...], ...}
+  ]
 }
 
 Pure: same (genome, seed, photo bytes) → identical polylines, forever.
@@ -28,6 +33,7 @@ from .humanize import humanize
 from .modules import MODULES
 from .photo import load_structure_ctx, mask_to_region, region_to_mask
 from .tonemod import tone_gate
+from .zones import zone_mask
 
 log = logging.getLogger(__name__)
 
@@ -76,15 +82,29 @@ def render(genome: dict, seed: int, photo_path: str | None = None):
         log.info("band %s %s: %d lines", band_i, name, len(lines))
         layers.setdefault(entry.get("pen", "black03"), []).extend(lines)
 
-    bands = genome.get("bands", [])
-    for i, entry in enumerate(bands):
-        if i >= len(ctx["tone_bands"]):
-            break
-        run(entry, ctx["tone_bands"][i], i)
+    def run_stack(bands, edges, zmask, base_i, edges_i):
+        for i, entry in enumerate(bands):
+            if i >= len(ctx["tone_bands"]):
+                break
+            run(entry, ctx["tone_bands"][i] & zmask, base_i + i)
+        if edges:
+            run(edges, zmask.copy(), edges_i)
 
-    edges = genome.get("edges")
-    if edges:
-        full = np.ones_like(ctx["edge_map"], dtype=bool)
-        run(edges, full, 99)
+    full = np.ones_like(ctx["edge_map"], dtype=bool)
+    zones = genome.get("zones")
+    if zones:
+        # zones claim pixels in order; {"type": "rest"} takes the remainder
+        claimed = np.zeros_like(full)
+        for zi, zone in enumerate(zones):
+            sel = zone.get("select", {"type": "rest"})
+            zm = (~claimed if sel.get("type") == "rest"
+                  else zone_mask(sel, ctx) & ~claimed)
+            claimed |= zm
+            run_stack(zone.get("bands", []), zone.get("edges"), zm,
+                      100 + zi * 20, 100 + zi * 20 + 19)
+    else:
+        # band/edge indices (i, 99) predate zones — keep the RNG streams
+        # of every already-stored genome byte-identical
+        run_stack(genome.get("bands", []), genome.get("edges"), full, 0, 99)
 
     return layers, page

@@ -17,6 +17,7 @@ from opensimplex import OpenSimplex
 
 from .field import trace_streamlines
 from .geom import Polyline
+from .hatch import fan_hatch as _fan_lines
 from .hatch import fixed_hatch as _parallel_lines
 
 
@@ -145,6 +146,72 @@ def solid_fill(mask, region, ctx, params, rng) -> list[Polyline]:
         spacing_jitter=_p(params, "spacing_jitter", 0.08))
 
 
+def fan_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
+    """Strokes radiating from a pivot — near-parallel lines that subtly
+    converge toward a vanishing point (summit, sun, horizon). Pivot is in
+    PAGE fractions and may sit far outside the page: [0.45, -1.2] is high
+    above it. Pair with tone_mod for shaded slope fans."""
+    page = ctx["page"]
+    fx, fy = _p(params, "pivot", [0.5, -1.5])
+    pivot = (float(fx) * page.width_mm, float(fy) * page.height_mm)
+    return _fan_lines(
+        region, pivot,
+        spacing_mm=_p(params, "spacing_mm", 1.0),
+        rng=rng,
+        spacing_jitter=_p(params, "spacing_jitter", 0.12))
+
+
+def shingle_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
+    """Overlapping swatches of straight parallel strokes, each at its own
+    angle — the interlocking canopy/rock texture of classic pen-and-ink
+    (and gen1's hatch_hatch shape-stack). Swatches are z-ordered and
+    OCCLUDE one another, so boundaries read as angle changes: no outlines,
+    no white seams, no plaid."""
+    from shapely import affinity
+    from shapely.geometry import Polygon as ShapelyPolygon
+
+    swatch = _p(params, "swatch_mm", 12.0)       # mean swatch size
+    aspect = _p(params, "aspect", 0.65)
+    overlap = _p(params, "overlap", 0.5)         # 0 = tiled, ->1 = piled
+    spacing = _p(params, "spacing_mm", 0.9)
+    sjit = _p(params, "spacing_jitter", 0.1)
+    angles = _p(params, "angles", [10, 40, 70, 100, 130, 160])
+    max_swatches = _p(params, "max_swatches", 600)
+
+    minx, miny, maxx, maxy = region.bounds
+    step = max(swatch * (1.0 - overlap), 1.0)
+    seeds = []
+    y = miny
+    while y <= maxy:
+        x = minx
+        while x <= maxx:
+            seeds.append((x + rng.uniform(-step, step) * 0.4,
+                          y + rng.uniform(-step, step) * 0.4))
+            x += step
+        y += step
+    rng.shuffle(seeds)
+    seeds = seeds[:max_swatches]
+
+    out: list[Polyline] = []
+    covered = None
+    for cx, cy in seeds:  # first-processed sits on top of the pile
+        w = swatch * rng.uniform(0.7, 1.3)
+        h = w * aspect * rng.uniform(0.8, 1.2)
+        ang = float(rng.choice(angles)) + rng.uniform(-6, 6)
+        corners = np.array([[-w, -h], [w, -h], [w, h], [-w, h]]) / 2
+        corners *= rng.uniform(0.85, 1.15, size=(4, 1))  # irregular quad
+        quad = affinity.rotate(ShapelyPolygon(corners + [cx, cy]), ang)
+        vis = quad.intersection(region)
+        if covered is not None:
+            vis = vis.difference(covered)
+        if not vis.is_empty and vis.area > 0.5:
+            out += _parallel_lines(vis, ang, spacing, rng, sjit)
+        covered = quad if covered is None else covered.union(quad)
+        if covered.covers(region):
+            break
+    return out
+
+
 def patch_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
     """Classic pen-and-ink facet hatching. Segments the band into
     orientation-coherent patches (surface planes); each patch is filled
@@ -217,6 +284,8 @@ MODULES = {
     "fixed_hatch": fixed_hatch,
     "cross_hatch": cross_hatch,
     "flow_hatch": flow_hatch,
+    "fan_hatch": fan_hatch,
+    "shingle_hatch": shingle_hatch,
     "patch_hatch": patch_hatch,
     "contour_hatch": contour_hatch,
     "scribble_fill": scribble_fill,

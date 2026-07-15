@@ -46,6 +46,8 @@ def load_structure_ctx(path: str, page_size: str = "letter",
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise FileNotFoundError(path)
+    bgr = cv2.imread(path, cv2.IMREAD_COLOR)  # for hsv only; the tonal
+    # pipeline stays on the grayscale read so goldens are untouched
 
     # pick portrait/landscape page to match the image
     if "landscape" not in page_size and img.shape[1] > img.shape[0]:
@@ -61,6 +63,10 @@ def load_structure_ctx(path: str, page_size: str = "letter",
                      interpolation=cv2.INTER_AREA)
     h, w = img.shape
     page = Page.fit_image(page_size, margin_mm, w, h)
+    bgr = cv2.resize(bgr, (w, h), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
+    hsv *= np.array([2.0, 1 / 255.0, 1 / 255.0], np.float32)  # H deg 0-360,
+    # S and V 0-1 — the scale zone selectors are written against
 
     def mm_px(mm: float) -> int:
         return max(int(round(mm / page.mm_per_px)), 1)
@@ -101,7 +107,7 @@ def load_structure_ctx(path: str, page_size: str = "letter",
     return {"gray": g, "tone_bands": tone_bands, "edge_map": edge_map,
             "orientation": theta.astype(np.float32),
             "coherence": coherence.astype(np.float32), "page": page,
-            "region_params": p["region"]}
+            "hsv": hsv, "region_params": p["region"]}
 
 
 def region_to_mask(region, page: Page, shape: tuple[int, int]) -> np.ndarray:

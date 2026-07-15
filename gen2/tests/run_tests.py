@@ -37,7 +37,7 @@ REAL_PHOTOS = [str(FIXDIR / f"{n}.png")
 PAIRS = sorted((f"{p.stem[:-4]}_src.png", p.name)
                for p in FIXDIR.glob("*_ink.png")
                if (FIXDIR / f"{p.stem[:-4]}_src.png").exists())
-PAIR_GENOMES = ("pen_ink", "classic_ink")
+PAIR_GENOMES = ("pen_ink", "classic_ink", "alpine_zones")
 OVERSHOOT_TOL = 3.0  # mm; humanization overshoot allowance
 
 

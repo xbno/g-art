@@ -92,9 +92,42 @@ only when the subject genuinely wants a topographic reading.
   #    "seg_mm": 1-5,    # dash grain
   #    "gamma": 0.6-1.6} # >1 lighter overall
   "edges": null | {"module": "contour_lines", "pen": ...,
-                   "params": {"min_len_mm": 2-10}, "humanize": {...}}
+                   "params": {"min_len_mm": 2-10}, "humanize": {...}},
+  "zones": [ ... ]   # OPTIONAL, replaces top-level bands/edges — see below
 }
 ```
+
+## Zones — treat objects differently (sky vs snow vs rock vs trees)
+Tone bands are luminance-only: a blue sky and blue shaded snow land in the
+same band and get identical marks, which is wrong — artists give each
+MATERIAL its own treatment. A genome may replace top-level `bands`/`edges`
+with `zones`: each zone selects pixels and runs its own full band stack.
+Zones claim pixels in order; end with a `rest` zone for everything else.
+
+```
+"zones": [
+  {"name": "sky",
+   "select": {"type": "hsv",
+      "hue": [lo, hi],        # degrees 0-360 (wraparound ok)
+      "sat": [lo, hi], "val": [lo, hi],   # 0-1
+      "y": [lo, hi],          # image-height fractions, 0 = top
+      "max_edge_density": 0-0.15,  # texture cue: keep only SMOOTH areas —
+                                   # separates sky from same-colored
+                                   # textured snow/foliage
+      "top_connected": true,  # keep only components touching the frame top
+      "smooth_mm": 1-5},
+   "bands": [...], "edges": null},
+  {"name": "foreground",
+   "select": {"type": "poly", "points": [[fx, fy], ...]},  # image fractions
+              # YOU can draw this from looking at the photo — outline the
+              # object with 5-15 vertices
+   "bands": [...]},
+  {"name": "rest", "select": {"type": "rest"}, "bands": [...], "edges": {...}}
+]
+```
+Typical zoning: sky (calm single-angle ruled lines + tone_mod for clouds),
+distant ridges (light/atmospheric pen), main subject (fan/patch hatching),
+foreground (bolder pen, denser marks). 2-4 zones is plenty.
 
 ## Modules and their params
 - `patch_hatch` — THE pen-and-ink workhorse. Segments the band into
@@ -107,6 +140,17 @@ only when the subject genuinely wants a topographic reading.
   min_patch_mm2 10-100, fallback_angle_deg (used in flat/incoherent areas
   like sky), min_coherence 0-0.3, cross_delta_deg (0=off; 45-75 adds a
   cross pass for shadow depth), cross_spacing_scale ~1.0
+- `fan_hatch` — strokes radiating from a pivot: near-parallel lines that
+  subtly CONVERGE toward a vanishing point, the classic slope treatment
+  (see the reference mountains). pivot [fx, fy] in page fractions, MAY BE
+  FAR OFF-PAGE ([0.45, -1.2] = high above) or on the summit you see in
+  the photo; spacing_mm, spacing_jitter. Pair with tone_mod.
+- `shingle_hatch` — overlapping z-ordered swatches of parallel strokes,
+  each swatch at its own angle; boundaries read as ANGLE CHANGES, no
+  outlines, no seams. THE texture for foliage canopies, rough rock, and
+  dark interlocked masses (see the tree in the references). swatch_mm
+  6-20, aspect 0.4-1.0, overlap 0.3-0.7, spacing_mm, angles [list of
+  degrees], max_swatches
 - `empty` — bare paper. A real gene; restraint is a virtue.
 - `fixed_hatch` — one global angle. angle_deg, spacing_mm 0.4-3.0,
   spacing_jitter 0-0.3. Good for calm skies/water.
@@ -128,6 +172,11 @@ Every `pen` field must be one of the names in the payload's `pens` list.
 
 ## Quality rubric (score each render honestly, 0-2 per line)
 - patches read as planes: adjacent surfaces get different stroke angles
+- NO PLAID, NO GLOBULAR BLOBS: dense two-direction cross_hatch grids read
+  mechanical, and blob-shaped patches with white seams/outlines appear
+  nowhere in the references. For dark or textured masses prefer
+  shingle_hatch, tighter single-direction spacing, or patch_hatch with
+  patch_gap_mm 0; keep cross passes for deep shadow accents only
 - ≥4 distinguishable tone treatments; darkest near-solid, lightest bare paper
 - genuine negative space — some of the page must breathe
 - straight, confident hatching where the style refs use it; no noise mush
