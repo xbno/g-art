@@ -109,6 +109,33 @@ MATERIAL its own treatment. A genome may replace top-level `bands`/`edges`
 with `zones`: each zone selects pixels and runs its own full band stack.
 Zones claim pixels in order; end with a `rest` zone for everything else.
 
+**Scene zones (PREFERRED when a `.scene.json` exists next to the photo).**
+If the photo has a frozen decomposition plan (`<stem>.scene.{npz,json}`,
+made offline by `python -m decompose <photo>`), zones can select TRUE
+OBJECTS — SAM regions with depth order and quantized tone — instead of
+pixel rules. Read the `<stem>.scene.png` overlay to see region ids
+(tags are `id:d<depth_rank>t<tone_level>`), then cite them:
+
+```
+"select": {"type": "scene", "ids": [3, 8]}          # explicit regions
+"select": {"type": "scene", "depth_rank": [0, 1]}   # farthest two
+"select": {"type": "scene", "tone_level": [3, 3]}   # darkest regions
+```
+
+Order zones far-to-near (sky first). Two zone-level keys unlock the
+reference look:
+
+- `"keyline_mm": 0.5-1.2` — engraver's white seam: marks pull back from
+  the object boundary so adjacent objects separate by bare paper. Use on
+  mountain faces, foliage masses; skip on sky.
+- `"base": {module entry}` — a zone-wide pass over the WHOLE object mask,
+  drawn before the band stack. THE fix for confetti: one committed
+  directional treatment per surface (fan/flow/fixed + `tone_mod` so
+  lights become bare paper), instead of per-band pixel islands that
+  shatter a face into speckle. A dark face = dense base pass with
+  tone_mod low 0.25-0.35 / high 0.55-0.7; reserve band entries for the
+  darkest accent shingles. `"bands": []` with only a base is legal.
+
 ```
 "zones": [
   {"name": "sky",
@@ -181,9 +208,40 @@ foreground (bolder pen, denser marks). 2-4 zones is plenty.
   spacing_mm 0.35-0.6, angle_deg
 - `contour_lines` — outline layer from the edge map. min_len_mm
 
+- `mosaic_hatch` — angular tessellating patch mosaic (watershed over the
+  crease field, RAG-merged, corners preserved): each patch gets straight
+  parallel strokes at its own angle and ONE committed density from its
+  mean tone. `spacing_mm` is a LIST per darkness level (None = bare),
+  merge 0.03-0.3 (higher = bigger patches), snap_deg, gap_mm, corner_mm.
+  Needs the photo decomposed (normals improve it, not required).
+
+## Normal-map powers (when `<photo>.normals.npz` exists)
+Run `python -m decompose <photo>` once; then:
+- `source.params.orientation_source: "normals"` — stroke direction from
+  surface geometry (fall line). `normals_smooth_mm` 2-10 sets character
+  (tight form-hug vs broad sweeps); `normals_stroke` "downslope"|"contour".
+- zone select `"normal_var": [lo, hi]` — surface roughness: high = trees/
+  rubble (short dashes/shingles), low = clean faces (ruled). 0.5+ is a
+  good tree gate.
+- `source.params.tone_source: {"type": "relight", "azimuth_deg": ..,
+  "elevation_deg": .., "mix": 0-1}` — shading from geometry with the sun
+  as a knob; high mix commits shadow sides regardless of photo exposure.
+- per-entry `"emphasis": {"falloff_mm": 15-70, "floor": 0-0.3}` —
+  INDICATION, the anti-robotic pass: stroke survival decays with distance
+  from feature lines (creases/silhouettes/edges), so ink clusters at
+  ridges and dissipates. Uniform texture allocation reads as generated;
+  reach for this whenever a render feels mechanical.
+
 Every `pen` field must be one of the names in the payload's `pens` list.
 
 ## Quality rubric (score each render honestly, 0-2 per line)
+- COMPOSITION FIRST (step back to thumbnail size before judging texture):
+  does each OBJECT read as one committed surface — the dark face uniformly
+  dark, the snow bare — or has it shattered into confetti? Compare value
+  placement against the paired ink at arm's length; a render with perfect
+  marks in the wrong places scores 0 here
+- objects separate: nearer forms occlude farther ones, white keylines or
+  angle changes at boundaries — never two objects blending into one texture
 - patches read as planes: adjacent surfaces get different stroke angles
 - NO PLAID, NO GLOBULAR BLOBS: dense two-direction cross_hatch grids read
   mechanical, and blob-shaped patches with white seams/outlines appear

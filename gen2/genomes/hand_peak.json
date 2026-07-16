@@ -1,0 +1,139 @@
+{
+ "name": "hand_peak",
+ "page": {
+  "size": "11x17",
+  "margin_mm": 24
+ },
+ "source": {
+  "params": {
+   "n_bands": 5,
+   "blur_mm": 1.2,
+   "orientation_source": "normals",
+   "normals_smooth_mm": 6.0
+  }
+ },
+ "humanize": {
+  "wobble_amp_mm": 0.13,
+  "overshoot_prob": 0.08,
+  "break_per_mm": 0.002
+ },
+ "plan": {
+  "channels": {
+   "masses": {
+    "field": "crease+shadow",
+    "merge": 0.2
+   },
+   "levels": {
+    "k": 3,
+    "sigma_frac": 0.012
+   },
+   "texture": null
+  },
+  "compose": [
+   {
+    "op": "commit_levels"
+   },
+   {
+    "op": "weld_small",
+    "min_frac": 0.01
+   },
+   {
+    "op": "force_tone",
+    "min_gap": 0.04
+   },
+   {
+    "op": "elect_extremes"
+   }
+  ],
+  "assign": {
+   "targets": [
+    0.0,
+    0.15,
+    0.55
+   ],
+   "palette": [
+    "blue03",
+    "black03",
+    "black05"
+   ],
+   "modules": [
+    "fixed_hatch",
+    "cross_hatch"
+   ],
+   "prefer": [
+    "fixed_hatch",
+    "cross_hatch"
+   ],
+   "micro_tone": null,
+   "emphasis": null,
+   "keyline_mm": 0.6
+  },
+  "direction": {
+   "mode": "per_mass",
+   "snap_deg": 15
+  },
+  "sky_zone": {
+   "name": "sky",
+   "select": {
+    "type": "hsv",
+    "hue": [
+     170,
+     260
+    ],
+    "sat": [
+     0.05,
+     1.0
+    ],
+    "max_edge_density": 0.05,
+    "top_connected": true,
+    "smooth_mm": 3.0
+   },
+   "bands": [
+    {
+     "module": "fixed_hatch",
+     "pen": "blue03",
+     "params": {
+      "angle_deg": 0,
+      "spacing_mm": 0.85,
+      "spacing_jitter": 0.06
+     },
+     "tone_mod": {
+      "low": 0.04,
+      "high": 0.32,
+      "seg_mm": 4.0
+     }
+    },
+    {
+     "module": "fixed_hatch",
+     "pen": "blue03",
+     "params": {
+      "angle_deg": 0,
+      "spacing_mm": 0.7,
+      "spacing_jitter": 0.06
+     },
+     "tone_mod": {
+      "low": 0.05,
+      "high": 0.4,
+      "seg_mm": 4.0
+     }
+    },
+    {
+     "module": "fixed_hatch",
+     "pen": "blue03",
+     "params": {
+      "angle_deg": 0,
+      "spacing_mm": 0.6,
+      "spacing_jitter": 0.06
+     }
+    },
+    {
+     "module": "empty"
+    },
+    {
+     "module": "empty"
+    }
+   ]
+  },
+  "outline": null
+ }
+}

@@ -291,6 +291,114 @@ def patch_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
     return out
 
 
+def _rag_weight(graph, src, dst, n):
+    d = {"weight": 0.0, "count": 0}
+    cs, cd = graph[src].get(n, d)["count"], graph[dst].get(n, d)["count"]
+    ws, wd = graph[src].get(n, d)["weight"], graph[dst].get(n, d)["weight"]
+    return {"count": cs + cd,
+            "weight": (cs * ws + cd * wd) / max(cs + cd, 1)}
+
+
+def _rag_merge(graph, src, dst):
+    pass
+
+
+def mosaic_hatch(mask, region, ctx, params, rng) -> list[Polyline]:
+    """Angular patch mosaic, the reference artist's dark-face construction.
+    Watershed over the crease field (normals when decomposed, else tone
+    gradients) oversegments the zone; RAG merging keeps only boundaries
+    with real image support, so patches tessellate edge-to-edge and their
+    borders follow the picture's own lines. Each patch is polygonized with
+    CORNERS (no morphological rounding), filled with straight parallel
+    strokes at its own normal-derived angle, and committed to ONE density
+    from its mean tone — tone changes at patch borders, not per pixel."""
+    from scipy import ndimage
+    from shapely.geometry import Polygon as ShapelyPolygon
+    from skimage import graph as skgraph
+    from skimage.morphology import h_minima
+    from skimage.segmentation import watershed
+
+    page = ctx["page"]
+    g = ctx["gray"]
+    blur = max(_p(params, "field_blur_mm", 1.5) / page.mm_per_px, 0.5)
+    n = ctx.get("normals")
+    if n is not None:
+        ns = cv2.GaussianBlur(n, (0, 0), blur)
+        f = (np.abs(cv2.Sobel(ns[..., 0], cv2.CV_32F, 1, 0)) +
+             np.abs(cv2.Sobel(ns[..., 1], cv2.CV_32F, 0, 1)))
+    else:
+        gb = cv2.GaussianBlur(g, (0, 0), blur)
+        f = np.hypot(cv2.Sobel(gb, cv2.CV_32F, 1, 0),
+                     cv2.Sobel(gb, cv2.CV_32F, 0, 1))
+    f = f / (f.max() + 1e-9)
+    gb = cv2.GaussianBlur(g, (0, 0), blur)
+    lg = np.hypot(cv2.Sobel(gb, cv2.CV_32F, 1, 0),
+                  cv2.Sobel(gb, cv2.CV_32F, 0, 1))
+    f = np.maximum(f, _p(params, "lum_edge_weight", 0.7)
+                   * lg / (lg.max() + 1e-9))
+
+    mk, _ = ndimage.label(h_minima(f, _p(params, "seed_h", 0.015)))
+    over = watershed(f, mk, mask=mask)
+    rag = skgraph.rag_boundary(over, f.astype(np.float64))
+    labels = skgraph.merge_hierarchical(
+        over, rag, _p(params, "merge", 0.08), rag_copy=True,
+        in_place_merge=True, merge_func=_rag_merge,
+        weight_func=_rag_weight)
+
+    ids = [int(i) for i in np.unique(labels[mask]) if i != 0]
+    if not ids:
+        return []
+    dark = {i: float(1.0 - g[labels == i].mean()) for i in ids}
+    qs = np.quantile(list(dark.values()),
+                     _p(params, "level_qs", [0.35, 0.65, 0.88]))
+    spacings = _p(params, "spacing_mm", [None, 1.1, 0.7, 0.45])
+    theta = ctx["orientation"]
+    snap = _p(params, "snap_deg", 0.0)
+    jitter = _p(params, "angle_jitter_deg", 4.0)
+    gap = _p(params, "gap_mm", 0.0)
+    corner = _p(params, "corner_mm", 0.8)
+    min_mm2 = _p(params, "min_patch_mm2", 6.0)
+    cross_delta = _p(params, "cross_delta_deg", 60.0)
+
+    out: list[Polyline] = []
+    for i in ids:
+        level = int(np.digitize(dark[i], qs))
+        spacing = spacings[min(level, len(spacings) - 1)]
+        if spacing is None:
+            continue
+        pm = ((labels == i) & mask).astype(np.uint8)
+        t = theta[pm.astype(bool)]
+        ang = np.degrees(0.5 * np.arctan2(np.sin(2 * t).mean(),
+                                          np.cos(2 * t).mean()))
+        ang += _p(params, "angle_offset_deg", 0.0)
+        if snap > 0:
+            ang = round(ang / snap) * snap
+        ang += rng.uniform(-jitter, jitter)
+        eps = corner / page.mm_per_px
+        contours, _ = cv2.findContours(pm, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            approx = cv2.approxPolyDP(c, eps, True)
+            if len(approx) < 3:
+                continue
+            poly = ShapelyPolygon(
+                page.px_to_mm(approx[:, 0, :].astype(np.float64)))
+            if not poly.is_valid:
+                poly = poly.buffer(0)
+            if poly.is_empty or poly.area < min_mm2:
+                continue
+            if gap > 0:
+                poly = poly.buffer(-gap / 2)
+                if poly.is_empty:
+                    continue
+            out += _parallel_lines(poly, ang, spacing, rng,
+                                   _p(params, "spacing_jitter", 0.1))
+            if level >= len(qs) and cross_delta > 0:
+                out += _parallel_lines(poly, ang + cross_delta,
+                                       spacing * 1.15, rng, 0.1)
+    return out
+
+
 def contour_lines(mask, region, ctx, params, rng) -> list[Polyline]:
     """Outline layer traced from the edge map. `mask` selects where edges
     are kept (pass the full-page mask for a global outline layer)."""
@@ -318,6 +426,7 @@ MODULES = {
     "fan_hatch": fan_hatch,
     "shingle_hatch": shingle_hatch,
     "patch_hatch": patch_hatch,
+    "mosaic_hatch": mosaic_hatch,
     "contour_hatch": contour_hatch,
     "scribble_fill": scribble_fill,
     "curl_fill": curl_fill,

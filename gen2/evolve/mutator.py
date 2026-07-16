@@ -160,19 +160,32 @@ class RandomMutator:
                 "child_a": self._mutate(parent, temperature),
                 "child_b": self._mutate(parent, temperature)}
 
+    def _entries(self, g: dict) -> list[dict]:
+        """Every mutable module entry: bands, and per-zone base/bands/edges."""
+        out = list(g.get("bands", []))
+        for zone in g.get("zones", []):
+            out += zone.get("bands", [])
+            for key in ("base", "edges"):
+                if zone.get(key):
+                    out.append(zone[key])
+        if g.get("edges"):
+            out.append(g["edges"])
+        return out
+
     def _mutate(self, parent: dict, temperature: str) -> dict:
         g = copy.deepcopy(parent)
-        if temperature == "explore" and self.rng.random() < 0.7:
-            band = g["bands"][int(self.rng.integers(len(g["bands"])))]
+        entries = self._entries(g)
+        swappable = [e for e in entries
+                     if e.get("module") not in ("contour_lines",)]
+        if swappable and temperature == "explore" and self.rng.random() < 0.7:
+            band = swappable[int(self.rng.integers(len(swappable)))]
             band["module"] = str(self.rng.choice(self.STRUCTURAL_MODULES))
             band.pop("params", None)
             if band["module"] != "empty":
                 band.setdefault("pen", str(self.rng.choice(pen_names())))
         self._scale_numbers(g.get("humanize", {}))
-        for band in g["bands"]:
+        for band in entries:
             self._scale_numbers(band.get("params", {}))
-        if g.get("edges"):
-            self._scale_numbers(g["edges"].get("params", {}))
         self._scale_numbers(g.get("source", {}).get("params", {}),
                             int_keys={"n_bands", "canny_lo", "canny_hi"})
         return g

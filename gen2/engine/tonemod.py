@@ -27,7 +27,11 @@ DEFAULTS = {
 
 
 def tone_gate(lines: list[Polyline], ctx: dict, params: dict | None,
-              rng: np.random.Generator) -> list[Polyline]:
+              rng: np.random.Generator,
+              dark_map: np.ndarray | None = None) -> list[Polyline]:
+    """dark_map overrides the default darkness source (1 - gray): the
+    tone_close stage passes its DEFICIT map so chunks survive exactly
+    where the drawing is still too light."""
     p = {**DEFAULTS, **(params or {})}
     gray, page = ctx["gray"], ctx["page"]
     h, w = gray.shape
@@ -41,7 +45,8 @@ def tone_gate(lines: list[Polyline], ctx: dict, params: dict | None,
         px = page.mm_to_px(ln)
         xi = np.clip(px[:, 0].astype(int), 0, w - 1)
         yi = np.clip(px[:, 1].astype(int), 0, h - 1)
-        dark = 1.0 - gray[yi, xi]
+        dark = (dark_map[yi, xi] if dark_map is not None
+                else 1.0 - gray[yi, xi])
         if p["gamma"] != 1.0:
             dark = dark ** p["gamma"]
 
