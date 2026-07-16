@@ -1,0 +1,181 @@
+{
+ "source": "landscape.png",
+ "generator": "facebook/sam-vit-base+depth-anything/Depth-Anything-V2-Small-hf",
+ "shape": [
+  1200,
+  900
+ ],
+ "regions": [
+  {
+   "id": 1,
+   "name": null,
+   "area_frac": 0.00614,
+   "depth_mean": 0.8232,
+   "tone_mean": 0.3634,
+   "tone_level": 2,
+   "centroid": [
+    0.5735,
+    0.7269
+   ],
+   "bbox": [
+    0.0,
+    0.3625,
+    0.9989,
+    0.7817
+   ],
+   "depth_rank": 5
+  },
+  {
+   "id": 2,
+   "name": null,
+   "area_frac": 0.39948,
+   "depth_mean": 0.7529,
+   "tone_mean": 0.3802,
+   "tone_level": 2,
+   "centroid": [
+    0.5074,
+    0.5753
+   ],
+   "bbox": [
+    0.0,
+    0.3625,
+    0.9989,
+    0.7775
+   ],
+   "depth_rank": 4
+  },
+  {
+   "id": 3,
+   "name": null,
+   "area_frac": 0.13743,
+   "depth_mean": 0.0246,
+   "tone_mean": 0.6395,
+   "tone_level": 1,
+   "centroid": [
+    0.509,
+    0.0712
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.9989,
+    0.1792
+   ],
+   "depth_rank": 0
+  },
+  {
+   "id": 4,
+   "name": null,
+   "area_frac": 0.13646,
+   "depth_mean": 0.9089,
+   "tone_mean": 0.2169,
+   "tone_level": 3,
+   "centroid": [
+    0.3114,
+    0.8885
+   ],
+   "bbox": [
+    0.0,
+    0.78,
+    0.7122,
+    0.9992
+   ],
+   "depth_rank": 7
+  },
+  {
+   "id": 5,
+   "name": null,
+   "area_frac": 0.13147,
+   "depth_mean": 0.0435,
+   "tone_mean": 0.7867,
+   "tone_level": 0,
+   "centroid": [
+    0.5862,
+    0.2131
+   ],
+   "bbox": [
+    0.0,
+    0.085,
+    0.9989,
+    0.3675
+   ],
+   "depth_rank": 1
+  },
+  {
+   "id": 6,
+   "name": null,
+   "area_frac": 0.09582,
+   "depth_mean": 0.0679,
+   "tone_mean": 0.7095,
+   "tone_level": 1,
+   "centroid": [
+    0.2788,
+    0.3056
+   ],
+   "bbox": [
+    0.0,
+    0.1875,
+    0.73,
+    0.4183
+   ],
+   "depth_rank": 2
+  },
+  {
+   "id": 7,
+   "name": null,
+   "area_frac": 0.0639,
+   "depth_mean": 0.8931,
+   "tone_mean": 0.2376,
+   "tone_level": 3,
+   "centroid": [
+    0.8528,
+    0.8891
+   ],
+   "bbox": [
+    0.6556,
+    0.78,
+    0.9989,
+    0.9992
+   ],
+   "depth_rank": 6
+  },
+  {
+   "id": 8,
+   "name": null,
+   "area_frac": 0.01856,
+   "depth_mean": 0.924,
+   "tone_mean": 0.8376,
+   "tone_level": 0,
+   "centroid": [
+    0.6636,
+    0.9054
+   ],
+   "bbox": [
+    0.5478,
+    0.78,
+    0.7322,
+    0.9992
+   ],
+   "depth_rank": 8
+  },
+  {
+   "id": 9,
+   "name": null,
+   "area_frac": 0.01074,
+   "depth_mean": 0.0989,
+   "tone_mean": 0.7093,
+   "tone_level": 1,
+   "centroid": [
+    0.9486,
+    0.3135
+   ],
+   "bbox": [
+    0.8844,
+    0.2475,
+    0.9989,
+    0.365
+   ],
+   "depth_rank": 3
+  }
+ ]
+}

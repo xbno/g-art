@@ -1,0 +1,181 @@
+{
+ "source": "peak_src.png",
+ "generator": "facebook/sam-vit-large+depth-anything/Depth-Anything-V2-Small-hf",
+ "shape": [
+  1280,
+  765
+ ],
+ "regions": [
+  {
+   "id": 1,
+   "name": null,
+   "area_frac": 0.11977,
+   "depth_mean": 0.4196,
+   "tone_mean": 0.5449,
+   "tone_level": 1,
+   "centroid": [
+    0.6292,
+    0.681
+   ],
+   "bbox": [
+    0.0,
+    0.2539,
+    0.9987,
+    0.8617
+   ],
+   "depth_rank": 3
+  },
+  {
+   "id": 2,
+   "name": null,
+   "area_frac": 0.25451,
+   "depth_mean": 0.031,
+   "tone_mean": 0.4681,
+   "tone_level": 2,
+   "centroid": [
+    0.4575,
+    0.1793
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.9987,
+    0.6734
+   ],
+   "depth_rank": 0
+  },
+  {
+   "id": 3,
+   "name": null,
+   "area_frac": 0.2573,
+   "depth_mean": 0.2769,
+   "tone_mean": 0.5817,
+   "tone_level": 1,
+   "centroid": [
+    0.5331,
+    0.4648
+   ],
+   "bbox": [
+    0.0,
+    0.2547,
+    0.9987,
+    0.7008
+   ],
+   "depth_rank": 2
+  },
+  {
+   "id": 4,
+   "name": null,
+   "area_frac": 0.08164,
+   "depth_mean": 0.031,
+   "tone_mean": 0.6248,
+   "tone_level": 1,
+   "centroid": [
+    0.6711,
+    0.1459
+   ],
+   "bbox": [
+    0.0065,
+    0.0227,
+    0.9987,
+    0.2437
+   ],
+   "depth_rank": 1
+  },
+  {
+   "id": 5,
+   "name": null,
+   "area_frac": 0.02437,
+   "depth_mean": 0.6443,
+   "tone_mean": 0.1201,
+   "tone_level": 3,
+   "centroid": [
+    0.8607,
+    0.9479
+   ],
+   "bbox": [
+    0.7085,
+    0.8844,
+    0.9987,
+    0.9992
+   ],
+   "depth_rank": 6
+  },
+  {
+   "id": 6,
+   "name": null,
+   "area_frac": 0.01428,
+   "depth_mean": 0.9013,
+   "tone_mean": 0.1382,
+   "tone_level": 3,
+   "centroid": [
+    0.0677,
+    0.9386
+   ],
+   "bbox": [
+    0.0,
+    0.8539,
+    0.1294,
+    0.9992
+   ],
+   "depth_rank": 8
+  },
+  {
+   "id": 7,
+   "name": null,
+   "area_frac": 0.00859,
+   "depth_mean": 0.5382,
+   "tone_mean": 0.142,
+   "tone_level": 3,
+   "centroid": [
+    0.9224,
+    0.8761
+   ],
+   "bbox": [
+    0.8275,
+    0.8289,
+    0.9987,
+    0.9227
+   ],
+   "depth_rank": 4
+  },
+  {
+   "id": 8,
+   "name": null,
+   "area_frac": 0.11977,
+   "depth_mean": 0.562,
+   "tone_mean": 0.5726,
+   "tone_level": 1,
+   "centroid": [
+    0.4185,
+    0.7592
+   ],
+   "bbox": [
+    0.0,
+    0.5797,
+    0.9935,
+    0.9875
+   ],
+   "depth_rank": 5
+  },
+  {
+   "id": 9,
+   "name": null,
+   "area_frac": 0.11977,
+   "depth_mean": 0.7427,
+   "tone_mean": 0.3824,
+   "tone_level": 2,
+   "centroid": [
+    0.2973,
+    0.8844
+   ],
+   "bbox": [
+    0.0,
+    0.6828,
+    0.7817,
+    0.9992
+   ],
+   "depth_rank": 7
+  }
+ ]
+}

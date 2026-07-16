@@ -1,0 +1,86 @@
+{
+ "source": "snow_trees_src.png",
+ "generator": "facebook/sam-vit-base+depth-anything/Depth-Anything-V2-Small-hf",
+ "shape": [
+  493,
+  740
+ ],
+ "regions": [
+  {
+   "id": 1,
+   "name": null,
+   "area_frac": 0.69079,
+   "depth_mean": 0.2279,
+   "tone_mean": 0.7836,
+   "tone_level": 0,
+   "centroid": [
+    0.5075,
+    0.3817
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.9986,
+    0.998
+   ],
+   "depth_rank": 0
+  },
+  {
+   "id": 2,
+   "name": null,
+   "area_frac": 0.05448,
+   "depth_mean": 0.4933,
+   "tone_mean": 0.6124,
+   "tone_level": 1,
+   "centroid": [
+    0.0567,
+    0.6565
+   ],
+   "bbox": [
+    0.0,
+    0.4361,
+    0.1784,
+    0.998
+   ],
+   "depth_rank": 2
+  },
+  {
+   "id": 3,
+   "name": null,
+   "area_frac": 0.11478,
+   "depth_mean": 0.6125,
+   "tone_mean": 0.5966,
+   "tone_level": 1,
+   "centroid": [
+    0.214,
+    0.817
+   ],
+   "bbox": [
+    0.0459,
+    0.5051,
+    0.4419,
+    0.998
+   ],
+   "depth_rank": 3
+  },
+  {
+   "id": 4,
+   "name": null,
+   "area_frac": 0.13994,
+   "depth_mean": 0.4213,
+   "tone_mean": 0.6943,
+   "tone_level": 1,
+   "centroid": [
+    0.8653,
+    0.7557
+   ],
+   "bbox": [
+    0.6892,
+    0.428,
+    0.9986,
+    0.998
+   ],
+   "depth_rank": 1
+  }
+ ]
+}

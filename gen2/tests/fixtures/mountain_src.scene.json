@@ -1,0 +1,162 @@
+{
+ "source": "mountain_src.png",
+ "generator": "facebook/sam-vit-base+depth-anything/Depth-Anything-V2-Small-hf",
+ "shape": [
+  912,
+  1136
+ ],
+ "regions": [
+  {
+   "id": 1,
+   "name": null,
+   "area_frac": 0.07257,
+   "depth_mean": 0.0715,
+   "tone_mean": 0.4636,
+   "tone_level": 2,
+   "centroid": [
+    0.2772,
+    0.2959
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.9991,
+    0.4276
+   ],
+   "depth_rank": 2
+  },
+  {
+   "id": 2,
+   "name": null,
+   "area_frac": 0.26366,
+   "depth_mean": 0.0143,
+   "tone_mean": 0.6781,
+   "tone_level": 1,
+   "centroid": [
+    0.5087,
+    0.14
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.9991,
+    0.4287
+   ],
+   "depth_rank": 0
+  },
+  {
+   "id": 3,
+   "name": null,
+   "area_frac": 0.30306,
+   "depth_mean": 0.3093,
+   "tone_mean": 0.2196,
+   "tone_level": 3,
+   "centroid": [
+    0.4207,
+    0.6941
+   ],
+   "bbox": [
+    0.0,
+    0.3607,
+    0.7799,
+    0.9989
+   ],
+   "depth_rank": 5
+  },
+  {
+   "id": 4,
+   "name": null,
+   "area_frac": 0.08309,
+   "depth_mean": 0.6591,
+   "tone_mean": 0.8317,
+   "tone_level": 0,
+   "centroid": [
+    0.1256,
+    0.8521
+   ],
+   "bbox": [
+    0.0,
+    0.5833,
+    0.3433,
+    0.9989
+   ],
+   "depth_rank": 7
+  },
+  {
+   "id": 5,
+   "name": null,
+   "area_frac": 0.17908,
+   "depth_mean": 0.1044,
+   "tone_mean": 0.546,
+   "tone_level": 1,
+   "centroid": [
+    0.7486,
+    0.4765
+   ],
+   "bbox": [
+    0.3996,
+    0.2237,
+    0.9991,
+    0.7851
+   ],
+   "depth_rank": 3
+  },
+  {
+   "id": 6,
+   "name": null,
+   "area_frac": 0.01791,
+   "depth_mean": 0.4357,
+   "tone_mean": 0.4266,
+   "tone_level": 2,
+   "centroid": [
+    0.1362,
+    0.6695
+   ],
+   "bbox": [
+    0.0,
+    0.5504,
+    0.2262,
+    0.7961
+   ],
+   "depth_rank": 6
+  },
+  {
+   "id": 7,
+   "name": null,
+   "area_frac": 0.0128,
+   "depth_mean": 0.0563,
+   "tone_mean": 0.3964,
+   "tone_level": 2,
+   "centroid": [
+    0.9279,
+    0.3604
+   ],
+   "bbox": [
+    0.8319,
+    0.307,
+    0.9991,
+    0.4232
+   ],
+   "depth_rank": 1
+  },
+  {
+   "id": 8,
+   "name": null,
+   "area_frac": 0.06784,
+   "depth_mean": 0.189,
+   "tone_mean": 0.1687,
+   "tone_level": 3,
+   "centroid": [
+    0.8699,
+    0.8544
+   ],
+   "bbox": [
+    0.7421,
+    0.693,
+    0.9991,
+    0.9989
+   ],
+   "depth_rank": 4
+  }
+ ]
+}

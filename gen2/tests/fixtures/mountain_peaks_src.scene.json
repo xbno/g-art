@@ -1,0 +1,219 @@
+{
+ "source": "mountain_peaks_src.png",
+ "generator": "facebook/sam-vit-large+depth-anything/Depth-Anything-V2-Small-hf",
+ "shape": [
+  597,
+  335
+ ],
+ "regions": [
+  {
+   "id": 1,
+   "name": null,
+   "area_frac": 0.13843,
+   "depth_mean": 0.4696,
+   "tone_mean": 0.5487,
+   "tone_level": 1,
+   "centroid": [
+    0.7528,
+    0.4711
+   ],
+   "bbox": [
+    0.0,
+    0.3216,
+    0.997,
+    0.6868
+   ],
+   "depth_rank": 3
+  },
+  {
+   "id": 2,
+   "name": null,
+   "area_frac": 0.34197,
+   "depth_mean": 0.0114,
+   "tone_mean": 0.6048,
+   "tone_level": 1,
+   "centroid": [
+    0.4901,
+    0.1786
+   ],
+   "bbox": [
+    0.0,
+    0.0,
+    0.997,
+    0.4322
+   ],
+   "depth_rank": 2
+  },
+  {
+   "id": 3,
+   "name": null,
+   "area_frac": 0.14753,
+   "depth_mean": 0.614,
+   "tone_mean": 0.2996,
+   "tone_level": 2,
+   "centroid": [
+    0.2405,
+    0.5286
+   ],
+   "bbox": [
+    0.0,
+    0.3283,
+    0.5612,
+    0.8375
+   ],
+   "depth_rank": 4
+  },
+  {
+   "id": 4,
+   "name": null,
+   "area_frac": 0.03371,
+   "depth_mean": 0.7344,
+   "tone_mean": 0.3913,
+   "tone_level": 2,
+   "centroid": [
+    0.3639,
+    0.6876
+   ],
+   "bbox": [
+    0.2388,
+    0.603,
+    0.5164,
+    0.8157
+   ],
+   "depth_rank": 6
+  },
+  {
+   "id": 5,
+   "name": null,
+   "area_frac": 0.02456,
+   "depth_mean": 0.7444,
+   "tone_mean": 0.2154,
+   "tone_level": 3,
+   "centroid": [
+    0.1046,
+    0.7706
+   ],
+   "bbox": [
+    0.0,
+    0.6918,
+    0.2209,
+    0.8409
+   ],
+   "depth_rank": 7
+  },
+  {
+   "id": 6,
+   "name": null,
+   "area_frac": 0.02148,
+   "depth_mean": 0.8532,
+   "tone_mean": 0.6376,
+   "tone_level": 1,
+   "centroid": [
+    0.0662,
+    0.9178
+   ],
+   "bbox": [
+    0.0,
+    0.8358,
+    0.1403,
+    0.9983
+   ],
+   "depth_rank": 9
+  },
+  {
+   "id": 7,
+   "name": null,
+   "area_frac": 0.00657,
+   "depth_mean": 0.0003,
+   "tone_mean": 0.5133,
+   "tone_level": 1,
+   "centroid": [
+    0.0414,
+    0.2134
+   ],
+   "bbox": [
+    0.0,
+    0.1591,
+    0.1015,
+    0.2529
+   ],
+   "depth_rank": 0
+  },
+  {
+   "id": 8,
+   "name": null,
+   "area_frac": 0.0048,
+   "depth_mean": 0.0003,
+   "tone_mean": 0.2198,
+   "tone_level": 3,
+   "centroid": [
+    0.4207,
+    0.0198
+   ],
+   "bbox": [
+    0.3642,
+    0.0,
+    0.4985,
+    0.0469
+   ],
+   "depth_rank": 1
+  },
+  {
+   "id": 9,
+   "name": null,
+   "area_frac": 0.00409,
+   "depth_mean": 0.6659,
+   "tone_mean": 0.1536,
+   "tone_level": 3,
+   "centroid": [
+    0.3775,
+    0.5821
+   ],
+   "bbox": [
+    0.3194,
+    0.5611,
+    0.4388,
+    0.603
+   ],
+   "depth_rank": 5
+  },
+  {
+   "id": 10,
+   "name": null,
+   "area_frac": 0.13843,
+   "depth_mean": 0.7881,
+   "tone_mean": 0.4625,
+   "tone_level": 2,
+   "centroid": [
+    0.6329,
+    0.7392
+   ],
+   "bbox": [
+    0.0,
+    0.5762,
+    0.997,
+    0.9162
+   ],
+   "depth_rank": 8
+  },
+  {
+   "id": 11,
+   "name": null,
+   "area_frac": 0.13843,
+   "depth_mean": 0.9052,
+   "tone_mean": 0.5335,
+   "tone_level": 1,
+   "centroid": [
+    0.6032,
+    0.9165
+   ],
+   "bbox": [
+    0.1254,
+    0.7806,
+    0.997,
+    0.9983
+   ],
+   "depth_rank": 10
+  }
+ ]
+}

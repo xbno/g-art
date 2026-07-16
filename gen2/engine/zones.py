@@ -12,10 +12,48 @@ import cv2
 import numpy as np
 
 
+def _scene_region_match(r: dict, select: dict) -> bool:
+    if "names" in select and (r.get("name") or "") not in select["names"]:
+        return False
+    for key in ("depth_rank", "tone_level"):
+        if key in select:
+            lo, hi = select[key]
+            if not (lo <= r[key] <= hi):
+                return False
+    return True
+
+
 def zone_mask(select: dict, ctx: dict) -> np.ndarray:
     """Zone selector -> HxW bool mask. Deterministic."""
     h, w = ctx["gray"].shape
     t = select.get("type")
+    if t == "plan_mass":
+        pm = ctx.get("plan_masses")
+        if pm is None:
+            raise ValueError("plan_mass zone outside a compiled plan")
+        return pm == select["id"]
+    if t == "plan_outline":
+        need = ctx.get("plan_outline_mask")
+        return (need.copy() if need is not None
+                else np.zeros_like(ctx["gray"], dtype=bool))
+    if t == "scene":
+        # true objects from the frozen decomposition plan: pick regions by
+        # explicit id, by hand-assigned name, or by depth_rank/tone_level
+        # ranges ([lo, hi] inclusive)
+        scene = ctx.get("scene")
+        if scene is None:
+            raise ValueError(
+                "genome uses a scene zone but no .scene.npz plan exists "
+                "next to the photo — run: python -m decompose <photo>")
+        if "ids" in select:
+            ids = list(select["ids"])
+        elif {"names", "depth_rank", "tone_level"} & select.keys():
+            ids = [r["id"] for r in scene["regions"]
+                   if _scene_region_match(r, select)]
+        else:
+            raise ValueError("scene zone needs ids, names, depth_rank "
+                             "or tone_level")
+        return np.isin(scene["labels"], ids)
     if t == "poly":
         pts = (np.asarray(select["points"], dtype=float)
                * np.array([w, h])).astype(np.int32)
@@ -41,6 +79,15 @@ def zone_mask(select: dict, ctx: dict) -> np.ndarray:
         if "coherence" in select:  # structure-tensor anisotropy 0-1:
             lo, hi = select["coherence"]  # high = strongly directional
             m &= (ctx["coherence"] >= lo) & (ctx["coherence"] <= hi)
+        if "normal_var" in select:  # surface-normal roughness 0-1: high =
+            # trees/rubble (curly texture), low = clean faces (ruled).
+            # Needs a frozen <photo>.normals.npz (python -m decompose).
+            nv = ctx.get("normal_var")
+            if nv is None:
+                raise ValueError("zone selects normal_var but no "
+                                 ".normals.npz exists next to the photo")
+            lo, hi = select["normal_var"]
+            m &= (nv >= lo) & (nv <= hi)
         if "orient_deg" in select:  # local structure direction, mod 180
             lo, hi = select["orient_deg"]
             deg = np.degrees(np.mod(ctx["orientation"], np.pi))

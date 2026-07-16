@@ -29,6 +29,19 @@ contract — nothing may depend on the plotter itself). Plot workflow:
 
 - `engine/` — page, geom, photo (source → structure_ctx), hatch (modules),
   humanize, svgout. Modules consume `structure_ctx`, never the photo.
+- `decompose/` — OFFLINE scene decomposition (`python -m decompose
+  <photo>`): SAM + DepthAnything freeze a scene plan
+  (`<stem>.scene.{npz,json,png}`) next to the photo — true object regions
+  with depth order (0 = farthest) and quantized tone (0 = lightest).
+  The ONLY place torch/transformers may be imported; model inference
+  never runs inside render() (not reproducible across versions — the
+  frozen plan is source input, like photo bytes). Engine-side reader:
+  `engine/scene.py`. Genomes consume it via
+  `"select": {"type": "scene", "ids"|"depth_rank"|"tone_level": ...}`
+  zones plus zone-level `"base"` (whole-object pass — one committed
+  directional treatment per surface; the fix for tone-band confetti) and
+  `"keyline_mm"` (white seam between objects). See genomes/alpine_scene
+  and docs/prior-art.md for why this layer exists.
 - `evolve/` — M2 loop: store (SQLite tree), mutator, preview, cli
   (`python -m evolve.cli <photo>`). The mutator shells out to
   `claude -p "/mutate-genome <payload>"` (command:
