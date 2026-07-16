@@ -52,6 +52,17 @@ contract — nothing may depend on the plotter itself). Plot workflow:
   until both pass the rubric — never show the user an unseen render.
   Degrades to a seeded RandomMutator when the claude CLI is absent
   (or `--random`).
+- `review/` — THE review UI (`python -m review serve` → localhost:8787;
+  `python -m review build` regenerates, the open page auto-reloads).
+  Static site under `runs/review/`: marks (every module swatch + gradient
+  response + measured coverage, sorted value scale), pipeline (the active
+  genome×photo pair stage by stage), translation (per-mass promise vs
+  delivered, verdict map), iterations (content-addressed archive of every
+  genome state with diffs). **Discipline: everything in this repo is
+  judged by eye, through this UI.** Any new visual capability (module,
+  field, pipeline stage, test) gets a section or stage here in the same
+  change; after visual work, rebuild and LOOK before telling the user.
+  The active hand-loop pair lives in `review/build.py:ACTIVE`.
 - `m0.py` — M0 CLI: photo → banded fixed-angle hatch → humanize → layered SVG.
 - `pens.toml` — pen inventory; genome layers reference pen names.
 - `tests/fixtures/` — synthetic + cropped test sources (`make_fixture.py`).

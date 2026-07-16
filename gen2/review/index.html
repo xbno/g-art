@@ -1,0 +1,279 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hatchwork review</title>
+<style>
+  :root {
+    --bg: #ece9e3; --panel: #f7f5f1; --ink: #22201c; --dim: #7a756c;
+    --line: #d8d3ca; --accent: #2255aa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 "SF Mono", ui-monospace, Menlo, monospace; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel);
+           border-bottom: 1px solid var(--line); padding: 10px 18px;
+           display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
+  header .gen { color: var(--dim); font-size: 11px; margin-left: auto; }
+  nav a { color: var(--dim); text-decoration: none; padding: 4px 2px;
+          border-bottom: 2px solid transparent; cursor: pointer; }
+  nav a.on { color: var(--ink); border-color: var(--accent); }
+  main { max-width: 1500px; margin: 0 auto; padding: 22px 18px 120px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 34px 0 6px;
+       border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  .note { color: var(--dim); font-size: 12px; margin: 2px 0 14px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          padding: 8px; width: 230px; }
+  .card img { width: 100%; display: block; background: #fff;
+              cursor: zoom-in; image-rendering: auto; }
+  .card .t { font-size: 12px; margin-top: 6px; font-weight: 600; }
+  .card .s { font-size: 11px; color: var(--dim); white-space: pre-wrap; }
+  .card .cov { float: right; color: var(--accent); font-weight: 600; }
+  .wide { width: 470px; }
+  .stagecard { width: 340px; }
+  .scalestrip { display: flex; gap: 6px; overflow-x: auto;
+                padding: 10px; background: var(--panel);
+                border: 1px solid var(--line); }
+  .scalestrip .sw { flex: 0 0 110px; text-align: center; font-size: 10px;
+                    color: var(--dim); }
+  .scalestrip img { width: 110px; background: #fff; cursor: zoom-in; }
+  table { border-collapse: collapse; font-size: 12px; background: var(--panel); }
+  th, td { border: 1px solid var(--line); padding: 4px 9px; text-align: right; }
+  th { background: var(--bg); }
+  td.l, th.l { text-align: left; }
+  .ok { color: #3d7d2a; } .UNDER { color: #b06a00; }
+  .OVER { color: #b02020; } .INK { color: #a020a0; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px;
+           border: 1px solid var(--line); background: var(--panel);
+           margin-right: 6px; }
+  .diff { font-size: 11px; background: var(--panel); padding: 8px 10px;
+          border: 1px solid var(--line); white-space: pre-wrap;
+          max-width: 640px; }
+  .diff .add { color: #3d7d2a; } .diff .del { color: #b02020; }
+  .diff .chg { color: #b06a00; }
+  .iter { display: flex; gap: 16px; margin-bottom: 26px; align-items: flex-start; }
+  .iter img { width: 300px; background: #fff; border: 1px solid var(--line);
+              cursor: zoom-in; }
+  #lightbox { position: fixed; inset: 0; background: rgba(20,18,15,.92);
+              display: none; z-index: 50; overflow: auto; cursor: zoom-out;
+              text-align: center; }
+  #lightbox img { margin: 24px auto; background: #fff; }
+  #lightbox.fit img { max-width: 96vw; max-height: 92vh; }
+  #lightbox .hint { color: #bbb; font-size: 11px; position: fixed;
+                    bottom: 10px; left: 0; right: 0; }
+  #toast { position: fixed; bottom: 18px; right: 18px; background: var(--ink);
+           color: var(--panel); padding: 8px 14px; font-size: 12px;
+           opacity: 0; transition: opacity .3s; z-index: 60; }
+  .pairhead { font-size: 12px; color: var(--dim); margin-bottom: 12px; }
+  .stacks td { font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>hatchwork review</h1>
+  <nav id="nav"></nav>
+  <span class="gen" id="gen"></span>
+</header>
+<main id="main">loading…</main>
+<div id="lightbox" class="fit" onclick="lbClick(event)">
+  <img id="lbimg"><div class="hint">click: close · Z: toggle 1:1 pixels</div>
+</div>
+<div id="toast"></div>
+
+<script>
+let MAN = null, TAB = location.hash.slice(1) || 'pipeline';
+const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
+const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const pj = (o) => esc(JSON.stringify(o).replace(/[{}"]/g,'').replace(/,/g,'  '));
+
+const TABS = {
+  pipeline:   'pipeline',
+  translation:'translation',
+  marks:      'marks',
+  iterations: 'iterations',
+};
+
+function nav() {
+  const n = document.getElementById('nav'); n.innerHTML = '';
+  for (const t of Object.keys(TABS)) {
+    const a = $(`<a class="${t===TAB?'on':''}">${t}</a>`);
+    a.onclick = () => { TAB = t; location.hash = t; render(); };
+    n.appendChild(a);
+  }
+}
+
+function img(src, cls='') {
+  return `<img loading="lazy" class="${cls}" src="${src}" onclick="lb('${src}')">`;
+}
+
+// ---------------- marks ----------------
+function marksView(m) {
+  let h = `<h2>value scale — every mark, sorted light → dark</h2>
+    <div class="note">measured effective coverage (inkmap, black03). This is
+    the vocabulary the plan compiler shops from — if a value step is missing
+    here, no plan can hit it.</div><div class="scalestrip">`;
+  const ok = m.rows.filter(r => r.coverage != null)
+                   .sort((a,b) => a.coverage - b.coverage);
+  for (const r of ok)
+    h += `<div class="sw">${img(r.img)}${r.module}<br>` +
+         `<b>${r.coverage.toFixed(2)}</b></div>`;
+  h += `</div>`;
+
+  h += `<h2>modules — flat swatch · gradient response</h2>
+    <div class="note">left: uniform tone. right: the same marks through
+    tone_gate over a light→dark gradient — how each pattern *dies out in the
+    lights*. Judge raggedness, direction, and whether the gradient reads
+    hand-inked.</div>`;
+  const by = {};
+  for (const r of m.rows) (by[r.module] ??= []).push(r);
+  for (const [mod, rows] of Object.entries(by)) {
+    h += `<h2 style="border:none;margin-bottom:2px">${mod}</h2><div class="grid">`;
+    for (const r of rows) {
+      if (r.img == null) {
+        h += `<div class="card"><div class="t">${mod}</div>
+              <div class="s">did not run on synthetic ctx:\n${esc(r.error||'')}</div></div>`;
+        continue;
+      }
+      h += `<div class="card wide">
+        <div style="display:flex;gap:6px">
+          <div style="flex:1">${img(r.img)}</div>
+          <div style="flex:1">${img(r.img_grad)}</div>
+        </div>
+        <div class="t">${mod} <span class="cov">${r.coverage.toFixed(2)}</span></div>
+        <div class="s">${pj(r.params)}</div></div>`;
+    }
+    h += `</div>`;
+  }
+  return h;
+}
+
+// ---------------- pipeline ----------------
+function pipelineView(pairs) {
+  let h = '';
+  for (const p of pairs) {
+    h += `<h2>${p.name} × ${p.photo.split('/').pop()} · seed ${p.seed}
+          <span class="badge">${p.hash}</span></h2>
+      <div class="pairhead">every stage between photo and plotter, in order.
+      Click any image to zoom; Z for 1:1 pixels.</div><div class="grid">`;
+    for (const s of p.stages)
+      h += `<div class="card stagecard">${img(s.img)}
+            <div class="t">${s.title}</div><div class="s">${esc(s.note)}</div></div>`;
+    h += `</div>`;
+    if (p.zones && p.zones.length) {
+      h += `<h2>assigned stacks (what the compiler chose per mass)</h2>
+        <table class="stacks"><tr><th class="l">zone</th><th>keyline</th>
+        <th class="l">stack</th></tr>`;
+      for (const z of p.zones) {
+        const st = Array.isArray(z.stack)
+          ? z.stack.map(b => `${b.module}/${b.pen} ${pj(b.params)}`).join('<br>')
+          : z.stack;
+        h += `<tr><td class="l">${z.zone}</td><td>${z.keyline_mm}</td>
+              <td class="l">${st}</td></tr>`;
+      }
+      h += `</table>`;
+    }
+  }
+  return h || '<div class="note">no active pairs built yet — python -m review build pipeline</div>';
+}
+
+// ---------------- translation ----------------
+function translationView(pairs) {
+  let h = '';
+  for (const p of pairs) {
+    if (!p.translation || !p.translation.length) continue;
+    const bad = p.translation.filter(r => r.verdict !== 'ok');
+    h += `<h2>${p.name}: ${p.translation.length - bad.length}/${p.translation.length}
+          masses deliver their promised value</h2>
+      <div class="note">promise = calibrated coverage target per level;
+      achieved = inkmap over the final render. UNDER/OVER = ratio outside
+      [0.6, 1.6].</div>
+      <div class="grid">`;
+    const vm = p.stages.find(s => s.key === 'verdict');
+    const pr = p.stages.find(s => s.key === 'promise');
+    const fin = p.stages.find(s => s.key === 'final');
+    for (const s of [pr, fin, vm]) if (s)
+      h += `<div class="card wide">${img(s.img)}<div class="t">${s.title}</div></div>`;
+    h += `</div><table><tr><th>mass</th><th>level</th><th>target</th>
+          <th>achieved</th><th>ratio</th><th class="l">verdict</th></tr>`;
+    for (const r of p.translation)
+      h += `<tr><td>${r.mass}</td><td>${r.level}</td><td>${r.target}</td>
+            <td>${r.achieved}</td><td>${r.ratio ?? '—'}</td>
+            <td class="l ${r.verdict.split(' ')[0]}">${r.verdict}</td></tr>`;
+    h += `</table>`;
+  }
+  return h || '<div class="note">no plan genomes in the active set</div>';
+}
+
+// ---------------- iterations ----------------
+function iterationsView(it) {
+  let h = `<div class="note">content-addressed archive: every state the
+    active genomes pass through, oldest first. One deliberate change per
+    step — the diff says what changed, the render says whether it worked.</div>`;
+  for (const [name, snaps] of Object.entries(it)) {
+    h += `<h2>${name} (${snaps.length} snapshot${snaps.length>1?'s':''})</h2>`;
+    snaps.forEach((s, i) => {
+      const d = s.diff.map(l =>
+        `<span class="${l[0]=='+'?'add':l[0]=='-'?'del':l[0]=='~'?'chg':''}">${esc(l)}</span>`
+      ).join('\n');
+      h += `<div class="iter">${img(s.img)}
+        <div><div class="t">v${i} <span class="badge">${s.hash}</span>
+        <span class="s">${s.meta.saved_at.slice(0,16)} · seed ${s.meta.seed}</span></div>
+        <div class="diff">${d}</div></div></div>`;
+    });
+  }
+  return h;
+}
+
+function render() {
+  nav();
+  const m = document.getElementById('main');
+  if (!MAN) { m.textContent = 'no manifest yet — python -m review build'; return; }
+  document.getElementById('gen').textContent =
+    'built ' + (MAN.generated || '').slice(0, 19).replace('T', ' ') + 'Z';
+  const S = MAN.sections || {};
+  try {
+    if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
+    else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
+    else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
+    else if (TAB === 'iterations') m.innerHTML = iterationsView(S.iterations || {});
+  } catch (e) { m.textContent = 'render error: ' + e; }
+}
+
+// lightbox
+function lb(src) {
+  const b = document.getElementById('lightbox');
+  document.getElementById('lbimg').src = src;
+  b.classList.add('fit'); b.style.display = 'block';
+}
+function lbClick() { document.getElementById('lightbox').style.display = 'none'; }
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') lbClick();
+  if (e.key.toLowerCase() === 'z')
+    document.getElementById('lightbox').classList.toggle('fit');
+});
+
+// load + auto-reload on rebuild
+async function load(first) {
+  try {
+    const r = await fetch('manifest.json?t=' + Date.now());
+    const man = await r.json();
+    if (!MAN || man.generated !== MAN.generated) {
+      MAN = man; render();
+      if (!first) toast('rebuilt — view updated');
+    }
+  } catch (e) { if (first) document.getElementById('main').textContent =
+    'manifest.json not found — run: python -m review build'; }
+}
+function toast(t) {
+  const el = document.getElementById('toast');
+  el.textContent = t; el.style.opacity = 1;
+  setTimeout(() => el.style.opacity = 0, 2500);
+}
+load(true);
+setInterval(load, 2000);
+</script>
+</body>
+</html>

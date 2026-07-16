@@ -1,0 +1,505 @@
+"""Section builders for the review site. Each builder writes PNGs under
+runs/review/imgs/ and returns a JSON-able dict that index.html renders.
+
+Sections:
+    marks        every mark module at calibrated settings — flat swatch,
+                 gradient (tone_gate) response, measured coverage, and the
+                 sorted Guptill value scale
+    pipeline     the active (genome, photo) pair stage by stage: photo →
+                 tone / orientation / normals → scene → plan masses →
+                 committed levels (the promise) → assigned stacks →
+                 per-pen layers → final render → ink delivered vs promised
+    translation  the translation test made visual: per-mass verdict map,
+                 target-vs-achieved table
+    iterations   content-hash archive of every state the active genomes
+                 pass through — a permanent timeline with genome diffs
+
+Heavy artifacts are cached by sha1(genome + photo + seed): rebuilding with
+an unchanged genome is instant, editing the genome rebuilds only its pair.
+"""
+
+import hashlib
+import json
+import logging
+import shutil
+import tempfile
+import tomllib
+from datetime import datetime, timezone
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+ROOT = Path(__file__).resolve().parent.parent
+import sys  # noqa: E402
+
+sys.path.insert(0, str(ROOT))
+
+from engine.inkmap import ink_map, pen_width_mm    # noqa: E402
+from engine.modules import MODULES                 # noqa: E402
+from engine.humanize import humanize               # noqa: E402
+from engine.tonemod import tone_gate               # noqa: E402
+
+log = logging.getLogger("review")
+
+OUT = ROOT / "runs" / "review"
+IMG = OUT / "imgs"
+
+# The active hand loop: (genome, photo, seed). One deliberate pair at a
+# time — this list IS the "what's new" answer.
+ACTIVE = [
+    ("genomes/hand_peak.json", "tests/fixtures/peak_src.png", 42),
+]
+
+PENS = tomllib.loads((ROOT / "pens.toml").read_text())
+
+
+def _hex_bgr(h):
+    h = h.lstrip("#")
+    return (int(h[4:6], 16), int(h[2:4], 16), int(h[0:2], 16))
+
+
+def _save(name: str, img: np.ndarray) -> str:
+    IMG.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(IMG / name), img)
+    return f"imgs/{name}"
+
+
+def _gray_png(a: np.ndarray) -> np.ndarray:
+    return np.clip(a * 255.0, 0, 255).astype(np.uint8)
+
+
+def _raster(layers: dict, page, width_px: int) -> np.ndarray:
+    """Rasterize polyline layers in pen colors on white (fast preview —
+    the pipeline's final render uses the real SVG->PNG path instead)."""
+    s = width_px / page.width_mm
+    h = int(round(page.height_mm * s))
+    img = np.full((h, width_px, 3), 255, np.uint8)
+    for pen, lines in layers.items():
+        col = _hex_bgr(PENS.get(pen, {"color": "#000"})["color"])
+        t = max(int(round(pen_width_mm(pen) * s)), 1)
+        pts = [np.round(np.asarray(ln) * s).astype(np.int32)
+               for ln in lines if len(ln) >= 2]
+        if pts:
+            cv2.polylines(img, pts, False, col, t, cv2.LINE_AA)
+    return img
+
+
+def _mass_colors(ids):
+    cols = {}
+    for i in ids:
+        hue = int((i * 0.61803398875 % 1.0) * 179)
+        c = cv2.cvtColor(np.uint8([[[hue, 150, 220]]]),
+                         cv2.COLOR_HSV2BGR)[0, 0]
+        cols[i] = tuple(int(v) for v in c)
+    return cols
+
+
+def _label_at_centroid(img, mask, text, scale=0.55):
+    ys, xs = np.nonzero(mask)
+    if not len(xs):
+        return
+    cv2.putText(img, text, (int(xs.mean()) - 18, int(ys.mean()) + 4),
+                cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 3,
+                cv2.LINE_AA)
+    cv2.putText(img, text, (int(xs.mean()) - 18, int(ys.mean()) + 4),
+                cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 1, cv2.LINE_AA)
+
+
+def _boundaries(labels):
+    k = np.ones((3, 3), np.uint8)
+    return (cv2.morphologyEx(labels.astype(np.int32).astype(np.float32),
+                             cv2.MORPH_GRADIENT, k) > 0)
+
+
+# ---------------------------------------------------------------- marks ----
+SWATCH_MM = 40.0
+CELL = 300
+
+
+def _swatch_ctx(gray):
+    from engine.page import Page
+    n = gray.shape[0]
+    page = Page(SWATCH_MM, SWATCH_MM, 0.0, SWATCH_MM / n, 0.0, 0.0)
+    return {"gray": gray, "orientation":
+            np.full_like(gray, np.deg2rad(52.0)),
+            "coherence": np.ones_like(gray),
+            "edge_map": np.zeros(gray.shape, bool),
+            "tone_bands": [np.ones(gray.shape, bool)],
+            "page": page, "normals": None}
+
+
+def _swatch_render(lines, page, pen="black03") -> np.ndarray:
+    img = np.full((CELL, CELL, 3), 255, np.uint8)
+    s = CELL / SWATCH_MM
+    t = max(int(round(pen_width_mm(pen) * s)), 1)
+    col = _hex_bgr(PENS[pen]["color"])
+    pts = [np.round(np.asarray(ln) * s).astype(np.int32)
+           for ln in lines if len(ln) >= 2]
+    if pts:
+        cv2.polylines(img, pts, False, col, t, cv2.LINE_AA)
+    return img
+
+
+def build_marks() -> dict:
+    """Flat swatch + measured coverage + gradient tone_gate response for
+    every calibrated spec, plus a few uncalibrated modules for the eye."""
+    import calibrate
+    from shapely.geometry import Polygon
+
+    specs = list(calibrate.SPECS)
+    for extra in (("fan_hatch", {"spacing_mm": 0.8}),
+                  ("fan_hatch", {"spacing_mm": 0.55}),
+                  ("patch_hatch", {"spacing_mm": 0.8}),
+                  ("contour_hatch", {"spacing_mm": 0.8})):
+        if not any(m == extra[0] and p == extra[1] for m, p in specs):
+            specs.append(extra)
+
+    n = int(SWATCH_MM * 4)
+    flat = _swatch_ctx(np.full((n, n), 0.35, np.float32))
+    grad_gray = np.tile(np.linspace(0.06, 0.94, n,
+                                    dtype=np.float32), (n, 1))
+    grad = _swatch_ctx(grad_gray)
+    page = flat["page"]
+    mask = np.ones((n, n), bool)
+    pad = 8
+    corners = np.array([[pad, pad], [n - pad, pad],
+                        [n - pad, n - pad], [pad, n - pad]], float)
+    region = Polygon(page.px_to_mm(corners))
+
+    rows = []
+    for i, (module, params) in enumerate(specs):
+        try:
+            rng = np.random.default_rng(7)
+            lines = MODULES[module](mask, region, flat, params, rng)
+            lines = humanize(lines, 7, {"wobble_amp_mm": 0.12})
+            cov = ink_map({"black03": lines}, page, (n, n), blur_mm=1.4)
+            inner = float(cov[n // 6:-n // 6, n // 6:-n // 6].mean())
+            img = _save(f"mark_{module}_{i}.png",
+                        _swatch_render(lines, page))
+            rng = np.random.default_rng(7)
+            glines = MODULES[module](mask, region, grad, params, rng)
+            glines = tone_gate(glines, grad,
+                               {"low": 0.06, "high": 0.9, "seg_mm": 3.0},
+                               np.random.default_rng(11))
+            glines = humanize(glines, 7, {"wobble_amp_mm": 0.12})
+            gimg = _save(f"mark_{module}_{i}_grad.png",
+                         _swatch_render(glines, page))
+            rows.append({"module": module, "params": params,
+                         "coverage": round(inner, 3),
+                         "img": img, "img_grad": gimg})
+        except Exception as e:  # a module that can't run on synthetic ctx
+            log.warning("marks: %s %s failed: %s", module, params, e)
+            rows.append({"module": module, "params": params,
+                         "coverage": None, "img": None, "img_grad": None,
+                         "error": str(e)})
+
+    table = []
+    mp = ROOT / "marks.json"
+    if mp.exists():
+        table = json.loads(mp.read_text())
+    return {"rows": rows, "calibration_table": table}
+
+
+# ------------------------------------------------------------- pipeline ----
+_CACHE_VER = "2"  # bump to invalidate cached pair builds after code changes
+
+
+def _pair_hash(genome_path: Path, photo: Path, seed: int) -> str:
+    h = hashlib.sha1()
+    h.update(_CACHE_VER.encode())
+    h.update(genome_path.read_bytes())
+    h.update(str(photo).encode())
+    h.update(str(seed).encode())
+    return h.hexdigest()[:12]
+
+
+def build_pair(genome_path: str, photo: str, seed: int) -> dict:
+    """Pipeline stages + translation check for one (genome, photo, seed).
+    Cached by content hash — unchanged pairs cost one JSON read."""
+    gp, pp = ROOT / genome_path, ROOT / photo
+    tag = _pair_hash(gp, pp, seed)
+    name = gp.stem
+    cache = IMG / f"pair_{name}_{tag}.json"
+    if cache.exists():
+        return json.loads(cache.read_text())
+
+    log.info("pipeline: rendering %s x %s (seed %d)", name, pp.name, seed)
+    from engine.render import _structure_ctx, render
+    from engine.svgout import render_png, write_svg
+
+    genome = json.loads(gp.read_text())
+    layers, page = render(genome, seed, photo_path=str(pp))
+    ctx = _structure_ctx(genome, str(pp))
+    shape = ctx["gray"].shape
+
+    stages = []
+
+    def stage(key, title, note, img_path):
+        stages.append({"key": key, "title": title, "note": note,
+                       "img": img_path})
+
+    # 1. source photo (+ paired target ink if present)
+    ph = cv2.imread(str(pp))
+    ph = cv2.resize(ph, (900, int(900 * ph.shape[0] / ph.shape[1])))
+    stage("photo", "source photo", "what we are translating",
+          _save(f"{tag}_photo.png", ph))
+    ink_ref = pp.with_name(pp.name.replace("_src", "_ink"))
+    if ink_ref.exists() and ink_ref != pp:
+        ik = cv2.imread(str(ink_ref))
+        ik = cv2.resize(ik, (900, int(900 * ik.shape[0] / ik.shape[1])))
+        stage("ink_ref", "target ink (reference)",
+              "the paired human ink drawing — the bar to clear",
+              _save(f"{tag}_inkref.png", ik))
+
+    # 2. working tone (post tone_source/relight)
+    stage("gray", "working tone", "ctx['gray'] after any relight mix — "
+          "the value field every module reads",
+          _save(f"{tag}_gray.png", _gray_png(ctx["gray"])))
+
+    # 3. tone bands
+    tb = ctx["tone_bands"]
+    bands = np.zeros(shape, np.uint8)
+    for i, b in enumerate(tb):
+        bands[b] = int(255 - i * (215 / max(len(tb) - 1, 1)))
+    stage("bands", f"tone bands (n={len(tb)})",
+          "quantized value steps, band 0 lightest",
+          _save(f"{tag}_bands.png", bands))
+
+    # 4. orientation field (hue = angle, brightness = coherence)
+    th, coh = ctx["orientation"], ctx["coherence"]
+    hsv = np.stack([((th % np.pi) / np.pi * 179).astype(np.uint8),
+                    np.full(shape, 200, np.uint8),
+                    (80 + coh * 175).astype(np.uint8)], -1)
+    stage("orient", "orientation field",
+          "stroke direction (hue = angle, bright = coherent); source: "
+          + str(genome.get("source", {}).get("params", {})
+                .get("orientation_source", "tone gradients")),
+          _save(f"{tag}_orient.png", cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)))
+
+    # 5. normals + variance
+    if ctx.get("normals") is not None:
+        nrm = ((ctx["normals"] + 1) / 2 * 255).astype(np.uint8)
+        stage("normals", "surface normals (Marigold, frozen)",
+              "geometry the strokes hang on",
+              _save(f"{tag}_normals.png",
+                    cv2.cvtColor(nrm, cv2.COLOR_RGB2BGR)))
+        if ctx.get("normal_var") is not None:
+            vv = cv2.applyColorMap(_gray_png(ctx["normal_var"]),
+                                   cv2.COLORMAP_VIRIDIS)
+            stage("nvar", "normal variance",
+                  "rough (trees/rubble) vs clean faces — texture gate",
+                  _save(f"{tag}_nvar.png", vv))
+
+    # 6. scene plan overlay (frozen decomposition)
+    sc = pp.with_name(pp.stem + ".scene.png")
+    if sc.exists():
+        stage("scene", "scene plan (SAM + depth, frozen)",
+              "true object regions; tags are id:d<depth>t<tone>",
+              f"imgs/{sc.name}" if shutil.copy(sc, IMG / sc.name) else "")
+
+    plan = genome.get("plan")
+    rows = []
+    zones_table = []
+    if plan:
+        from engine.plan import compile_plan
+        zones = compile_plan(plan, ctx)
+        masses, levels = ctx["plan_masses"], ctx["plan_levels"]
+        targets = plan.get("assign", {}).get("targets", [])
+        ids = [i for i in np.unique(masses) if i != 0]
+        cols = _mass_colors(ids)
+
+        # 7. masses
+        mimg = np.full((*shape, 3), 245, np.uint8)
+        for i in ids:
+            mimg[masses == i] = cols[i]
+        mimg[_boundaries(masses)] = (255, 255, 255)
+        for i in ids:
+            _label_at_centroid(mimg, masses == i,
+                               f"{i}:L{levels.get(i, 0)}")
+        stage("masses", f"plan masses ({len(ids)})",
+              "watershed + RAG merge over the crease field; the shapes "
+              "we commit to. label = mass_id:Level",
+              _save(f"{tag}_masses.png", mimg))
+
+        # 8. the promise — each mass filled with its level's target value
+        prom = np.full(shape, 255, np.uint8)
+        for i in ids:
+            lvl = levels.get(i, 0)
+            t = targets[lvl] if lvl < len(targets) else 0.0
+            prom[masses == i] = int(255 * (1 - t))
+        stage("promise", "committed levels (the plan's promise)",
+              f"each mass at its target coverage {targets} — compare "
+              "directly against the final render at thumbnail size",
+              _save(f"{tag}_promise.png", prom))
+
+        for z in zones:
+            zones_table.append({
+                "zone": z.get("name"),
+                "keyline_mm": z.get("keyline_mm", 0),
+                "stack": [{"module": b.get("module"),
+                           "pen": b.get("pen"),
+                           "params": b.get("params", {})}
+                          for b in (z.get("base") or [])] or "(band stack)"})
+
+    # 9. per-pen layers
+    for pen, lines in layers.items():
+        stage(f"pen_{pen}", f"layer: {pen} ({len(lines)} strokes)",
+              "one plotter pass", _save(f"{tag}_pen_{pen}.png",
+                                        _raster({pen: lines}, page, 900)))
+
+    # 10. final render — the real SVG->PNG path
+    final_png = IMG / f"{tag}_final.png"
+    with tempfile.NamedTemporaryFile(suffix=".svg") as tf:
+        write_svg(layers, PENS, page, tf.name)
+        render_png(tf.name, str(final_png), width_px=1400)
+    stage("final", "final render", "SVG exactly as the plotter sees it",
+          f"imgs/{final_png.name}")
+
+    # 11. ink delivered vs promised (translation)
+    cov = ink_map(layers, page, shape)
+    heat = cv2.applyColorMap(_gray_png(cov), cv2.COLORMAP_INFERNO)
+    stage("ink", "ink delivered (coverage map)",
+          "engine measuring its own drawing (inkmap)",
+          _save(f"{tag}_ink.png", heat))
+
+    if plan:
+        verd = np.full((*shape, 3), 245, np.uint8)
+        vcol = {"ok": (90, 170, 60), "UNDER": (60, 160, 240),
+                "OVER": (60, 60, 220), "INK ON PAPER-LEVEL": (200, 60, 200)}
+        for mid, lvl in sorted(levels.items(), key=lambda kv: kv[1]):
+            m = masses == mid
+            if m.sum() < 200:
+                continue
+            t = targets[lvl] if lvl < len(targets) else 0.0
+            a = float(cov[m].mean())
+            ratio = a / t if t > 0.01 else float("nan")
+            verdict = "ok"
+            if t > 0.01 and not 0.6 <= ratio <= 1.6:
+                verdict = "UNDER" if ratio < 0.6 else "OVER"
+            if t <= 0.01 and a > 0.08:
+                verdict = "INK ON PAPER-LEVEL"
+            rows.append({"mass": int(mid), "level": int(lvl),
+                         "target": round(float(t), 3),
+                         "achieved": round(a, 3),
+                         "ratio": None if t <= 0.01 else round(ratio, 2),
+                         "verdict": verdict})
+            verd[m] = vcol[verdict]
+            _label_at_centroid(verd, m, f"{mid}:{verdict}", 0.5)
+        verd[_boundaries(masses)] = (255, 255, 255)
+        stage("verdict", "translation verdict map",
+              "green ok / amber UNDER / red OVER / magenta ink-on-paper",
+              _save(f"{tag}_verdict.png", verd))
+
+    data = {"name": name, "genome_path": genome_path, "photo": photo,
+            "seed": seed, "hash": tag, "stages": stages,
+            "zones": zones_table, "translation": rows,
+            "genome": genome,
+            "final_img": f"imgs/{final_png.name}"}
+    cache.write_text(json.dumps(data, indent=1))
+    return data
+
+
+# ----------------------------------------------------------- iterations ----
+def _flat(d, prefix=""):
+    out = {}
+    if isinstance(d, dict):
+        for k, v in d.items():
+            out.update(_flat(v, f"{prefix}.{k}" if prefix else str(k)))
+    elif isinstance(d, list):
+        for i, v in enumerate(d):
+            out.update(_flat(v, f"{prefix}[{i}]"))
+    else:
+        out[prefix] = d
+    return out
+
+
+def _genome_diff(a: dict, b: dict) -> list[str]:
+    fa, fb = _flat(a), _flat(b)
+    out = []
+    for k in sorted(set(fa) | set(fb)):
+        if k not in fa:
+            out.append(f"+ {k} = {fb[k]}")
+        elif k not in fb:
+            out.append(f"- {k} (was {fa[k]})")
+        elif fa[k] != fb[k]:
+            out.append(f"~ {k}: {fa[k]} -> {fb[k]}")
+    return out
+
+
+def snapshot_iteration(pair: dict) -> None:
+    """Archive this genome state (content-addressed) so the hand loop's
+    history stays reviewable forever. Keyed by GENOME content only —
+    builder-code changes must not fake a new iteration."""
+    ghash = hashlib.sha1(json.dumps(pair["genome"],
+                                    sort_keys=True).encode()).hexdigest()[:12]
+    d = OUT / "iterations" / pair["name"] / ghash
+    if d.exists():
+        return
+    d.mkdir(parents=True)
+    (d / "genome.json").write_text(json.dumps(pair["genome"], indent=1))
+    shutil.copy(IMG / Path(pair["final_img"]).name, d / "render.png")
+    (d / "meta.json").write_text(json.dumps({
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "photo": pair["photo"], "seed": pair["seed"],
+        "note": ""}, indent=1))
+    log.info("iterations: archived %s/%s", pair["name"], pair["hash"])
+
+
+def build_iterations() -> dict:
+    out = {}
+    itdir = OUT / "iterations"
+    if not itdir.exists():
+        return out
+    for gdir in sorted(itdir.iterdir()):
+        if not gdir.is_dir():
+            continue
+        snaps = []
+        for s in gdir.iterdir():
+            meta_p = s / "meta.json"
+            if not meta_p.exists():
+                continue
+            meta = json.loads(meta_p.read_text())
+            snaps.append({
+                "hash": s.name, "meta": meta,
+                "genome": json.loads((s / "genome.json").read_text()),
+                "img": f"iterations/{gdir.name}/{s.name}/render.png"})
+        snaps.sort(key=lambda x: x["meta"]["saved_at"])
+        for i, s in enumerate(snaps):
+            s["diff"] = (_genome_diff(snaps[i - 1]["genome"], s["genome"])
+                         if i else ["(first snapshot)"])
+            s.pop("genome")
+        out[gdir.name] = snaps
+    return out
+
+
+# ----------------------------------------------------------------- main ----
+SECTIONS = ("marks", "pipeline", "iterations")
+
+
+def build(sections=SECTIONS) -> Path:
+    OUT.mkdir(parents=True, exist_ok=True)
+    IMG.mkdir(parents=True, exist_ok=True)
+    man_p = OUT / "manifest.json"
+    man = (json.loads(man_p.read_text()) if man_p.exists()
+           else {"sections": {}})
+
+    if "marks" in sections:
+        man["sections"]["marks"] = build_marks()
+    if "pipeline" in sections:
+        pairs = []
+        for genome_path, photo, seed in ACTIVE:
+            pair = build_pair(genome_path, photo, seed)
+            snapshot_iteration(pair)
+            pairs.append(pair)
+        man["sections"]["pipeline"] = pairs
+    if "iterations" in sections or "pipeline" in sections:
+        man["sections"]["iterations"] = build_iterations()
+
+    man["generated"] = datetime.now(timezone.utc).isoformat()
+    man["active"] = [{"genome": g, "photo": p, "seed": s}
+                     for g, p, s in ACTIVE]
+    man_p.write_text(json.dumps(man, indent=1))
+    shutil.copy(Path(__file__).parent / "index.html", OUT / "index.html")
+    log.info("review site -> %s", OUT / "index.html")
+    return OUT
