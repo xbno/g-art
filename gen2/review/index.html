@@ -93,6 +93,7 @@ const TABS = {
   pipeline:   'pipeline',
   translation:'translation',
   marks:      'marks',
+  starred:    'starred',
   iterations: 'iterations',
 };
 
@@ -207,6 +208,50 @@ function translationView(pairs) {
   return h || '<div class="note">no plan genomes in the active set</div>';
 }
 
+// ---------------- starred ----------------
+function starredView(st) {
+  let h = '';
+  if (st.pairs && st.pairs.length) {
+    h += `<div class="note">everything you starred in the old galleries,
+      rebuilt through the CURRENT pipeline — original panel first, then
+      every stage. This is the taste record we design against.</div>`;
+    for (const p of st.pairs) {
+      const m = p.starred_meta || {};
+      h += `<h2>★ [${m.family}] ${esc(m.title)}
+            <span class="badge">${m.gallery}</span></h2>
+        <div class="note">${pj(m.params)}</div><div class="grid">`;
+      if (m.img)
+        h += `<div class="card stagecard">${img(m.img)}
+              <div class="t">original gallery panel</div>
+              <div class="s">as starred</div></div>`;
+      for (const s of p.stages)
+        h += `<div class="card stagecard">${img(s.img)}
+              <div class="t">${s.title}</div>
+              <div class="s">${esc(s.note)}</div></div>`;
+      h += `</div>`;
+    }
+  }
+  if (st.bakeoff && st.bakeoff.length) {
+    h += `<h2>starred composition studies (bakeoff — plan channels,
+          no genome)</h2>
+      <div class="note">these stars are about WHERE boundaries and levels
+      should fall; they feed plan.channels choices, not marks.</div>
+      <div class="grid">`;
+    for (const it of st.bakeoff)
+      h += `<div class="card wide">${it.img ? img(it.img) : ''}
+        <div class="t">★ [${it.family}] ${esc(it.title)}
+        <span class="badge">${it.gallery}</span></div>
+        <div class="s">${pj(it.params)}${it.note ? '\n' + esc(it.note) : ''}
+        </div></div>`;
+    h += `</div>`;
+  }
+  return h || `<div class="note">no stars imported yet — run
+    <b>python -m review collect-stars --port 8765</b> (and 8766), open
+    those localhost URLs once, then
+    <b>python -m review import-stars &amp;&amp; python -m review build
+    starred</b>.</div>`;
+}
+
 // ---------------- iterations ----------------
 function iterationsView(it) {
   let h = `<div class="note">content-addressed archive: every state the
@@ -238,6 +283,7 @@ function render() {
     if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
+    else if (TAB === 'starred') m.innerHTML = starredView(S.starred || {});
     else if (TAB === 'iterations') m.innerHTML = iterationsView(S.iterations || {});
   } catch (e) { m.textContent = 'render error: ' + e; }
 }

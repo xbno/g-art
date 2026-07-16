@@ -21,6 +21,7 @@ an unchanged genome is instant, editing the genome rebuilds only its pair.
 import hashlib
 import json
 import logging
+import re
 import shutil
 import tempfile
 import tomllib
@@ -205,21 +206,23 @@ def build_marks() -> dict:
 _CACHE_VER = "2"  # bump to invalidate cached pair builds after code changes
 
 
-def _pair_hash(genome_path: Path, photo: Path, seed: int) -> str:
-    h = hashlib.sha1()
-    h.update(_CACHE_VER.encode())
-    h.update(genome_path.read_bytes())
-    h.update(str(photo).encode())
-    h.update(str(seed).encode())
-    return h.hexdigest()[:12]
-
-
 def build_pair(genome_path: str, photo: str, seed: int) -> dict:
+    gp = ROOT / genome_path
+    return build_pair_from(json.loads(gp.read_text()), gp.stem, photo,
+                           seed, src=genome_path)
+
+
+def build_pair_from(genome: dict, name: str, photo: str, seed: int,
+                    src: str | None = None) -> dict:
     """Pipeline stages + translation check for one (genome, photo, seed).
     Cached by content hash — unchanged pairs cost one JSON read."""
-    gp, pp = ROOT / genome_path, ROOT / photo
-    tag = _pair_hash(gp, pp, seed)
-    name = gp.stem
+    pp = ROOT / photo
+    h = hashlib.sha1()
+    h.update(_CACHE_VER.encode())
+    h.update(json.dumps(genome, sort_keys=True).encode())
+    h.update(str(photo).encode())
+    h.update(str(seed).encode())
+    tag = h.hexdigest()[:12]
     cache = IMG / f"pair_{name}_{tag}.json"
     if cache.exists():
         return json.loads(cache.read_text())
@@ -227,8 +230,6 @@ def build_pair(genome_path: str, photo: str, seed: int) -> dict:
     log.info("pipeline: rendering %s x %s (seed %d)", name, pp.name, seed)
     from engine.render import _structure_ctx, render
     from engine.svgout import render_png, write_svg
-
-    genome = json.loads(gp.read_text())
     layers, page = render(genome, seed, photo_path=str(pp))
     ctx = _structure_ctx(genome, str(pp))
     shape = ctx["gray"].shape
@@ -391,13 +392,95 @@ def build_pair(genome_path: str, photo: str, seed: int) -> dict:
               "green ok / amber UNDER / red OVER / magenta ink-on-paper",
               _save(f"{tag}_verdict.png", verd))
 
-    data = {"name": name, "genome_path": genome_path, "photo": photo,
+    data = {"name": name, "genome_path": src, "photo": photo,
             "seed": seed, "hash": tag, "stages": stages,
             "zones": zones_table, "translation": rows,
             "genome": genome,
             "final_img": f"imgs/{final_png.name}"}
     cache.write_text(json.dumps(data, indent=1))
     return data
+
+
+# -------------------------------------------------------------- starred ----
+STARS_PATH = Path(__file__).parent / "stars.json"
+
+
+def _all_showcase_variants() -> dict:
+    """(family, title) -> genome for every variant showcase.py can emit.
+    All generators are seeded/deterministic, so a starred panel's genome is
+    reconstructable from its manifest entry forever."""
+    import showcase
+    vs = (showcase.variants() + showcase.texture2_variants()
+          + showcase.patchwork_variants() + showcase.mosaic_variants()
+          + showcase.emphasis_variants() + showcase.iter2_variants()
+          + showcase.iter3_variants() + showcase.toneclosed_variants()
+          + showcase.downhill_variants() + showcase.plansweep_variants()
+          + showcase.bigsweep_variants())
+    return {(f, t): g for f, t, _p, g in vs}
+
+
+def import_stars() -> dict:
+    """Merge raw starred-id captures (stars_raw_<port>.json, written by the
+    collect-stars server) with every gallery manifest -> review/stars.json,
+    the committed home for taste data. Ids are param-hashed, so a star can
+    match manifests of several photos; all matches are kept."""
+    raw = set()
+    for f in sorted(OUT.glob("stars_raw_*.json")):
+        raw |= set(json.loads(f.read_text()))
+    stars = {}
+    for mf in sorted(ROOT.glob("runs/*/*/manifest.json")):
+        kind, stem = mf.parent.parent.name, mf.parent.name
+        if kind not in ("bakeoff", "showcase"):
+            continue
+        hit = [p for p in json.loads(mf.read_text()).get("panels", [])
+               if p.get("id") in raw]
+        if hit:
+            stars[f"{kind}/{stem}"] = hit
+    STARS_PATH.write_text(json.dumps(stars, indent=1))
+    found = sum(len(v) for v in stars.values())
+    log.info("import_stars: %d raw ids -> %d panels in %d galleries",
+             len(raw), found, len(stars))
+    return stars
+
+
+def build_starred() -> dict:
+    """Starred showcase renders rebuilt at PIPELINE level (genome
+    reconstructed, every stage imaged); starred bakeoff panels shown as
+    composition-channel references (they have no genome)."""
+    if not STARS_PATH.exists():
+        return {"pairs": [], "bakeoff": []}
+    stars = json.loads(STARS_PATH.read_text())
+    reg = None
+    pairs, bak = [], []
+    for gal, panels in sorted(stars.items()):
+        kind, stem = gal.split("/", 1)
+        for p in panels:
+            item = {"gallery": gal, "family": p.get("family"),
+                    "title": p.get("title"), "params": p.get("params", {}),
+                    "id": p.get("id")}
+            src_img = ROOT / "runs" / kind / stem / p.get("img", "")
+            if p.get("img") and src_img.exists():
+                dst = f"star_{kind}_{stem}_{Path(p['img']).name}"
+                shutil.copy(src_img, IMG / dst)
+                item["img"] = f"imgs/{dst}"
+            if kind != "showcase":
+                bak.append(item)
+                continue
+            if reg is None:
+                log.info("starred: loading showcase variant registry…")
+                reg = _all_showcase_variants()
+            title = re.sub(r"\s+tf\d+\.\d+$", "", p.get("title", ""))
+            g = reg.get((p.get("family"), title))
+            if g is None:
+                item["note"] = ("genome not reconstructable — no matching "
+                                "variant in showcase registry")
+                bak.append(item)
+                continue
+            pair = build_pair_from(g, f"star_{stem}_{p['id']}",
+                                   f"tests/fixtures/{stem}.png", 42)
+            pair["starred_meta"] = item
+            pairs.append(pair)
+    return {"pairs": pairs, "bakeoff": bak}
 
 
 # ----------------------------------------------------------- iterations ----
@@ -474,7 +557,7 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("marks", "pipeline", "iterations")
+SECTIONS = ("marks", "pipeline", "iterations", "starred")
 
 
 def build(sections=SECTIONS) -> Path:
@@ -495,6 +578,8 @@ def build(sections=SECTIONS) -> Path:
         man["sections"]["pipeline"] = pairs
     if "iterations" in sections or "pipeline" in sections:
         man["sections"]["iterations"] = build_iterations()
+    if "starred" in sections:
+        man["sections"]["starred"] = build_starred()
 
     man["generated"] = datetime.now(timezone.utc).isoformat()
     man["active"] = [{"genome": g, "photo": p, "seed": s}
