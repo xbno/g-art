@@ -454,6 +454,59 @@ def build_pair_from(genome: dict, name: str, photo: str, seed: int,
     return data
 
 
+# ---------------------------------------------------------------- bench ----
+def build_bench() -> dict:
+    """The re-ink bench (bench/): per reference crop — measurement,
+    skeleton-trace ceiling, greedy vocabulary reconstruction, and the
+    coverage/economy scores. Cached by crop bytes + code version."""
+    from bench.greedy import greedy_reink
+    from bench.measure import measure
+    from bench.trace import trace_replot
+
+    crops_dir = ROOT / "refs" / "crops"
+    if not crops_dir.exists():
+        return {"crops": []}
+    ver = "1"
+    out = []
+    for cp in sorted(crops_dir.glob("*.png")):
+        tag = hashlib.sha1(ver.encode() + cp.read_bytes()).hexdigest()[:10]
+        cache = IMG / f"bench_{cp.stem}_{tag}.json"
+        if cache.exists():
+            out.append(json.loads(cache.read_text()))
+            continue
+        log.info("bench: %s", cp.name)
+        m = measure(cp)
+        trace_ink, _polys, trace_stats = trace_replot(m)
+        greedy_ink, greedy_stats = greedy_reink(m)
+
+        imgs = {}
+        imgs["crop"] = _save(f"bench_{cp.stem}_crop.png", m["bgr"])
+        sk = (m["gray"] * 200 + 55).astype(np.uint8)
+        sk = cv2.cvtColor(sk, cv2.COLOR_GRAY2BGR)
+        sk[m["skeleton"]] = (40, 40, 230)
+        imgs["skeleton"] = _save(f"bench_{cp.stem}_skel.png", sk)
+        hsv = np.stack([
+            ((m["theta"] % np.pi) / np.pi * 179).astype(np.uint8),
+            np.full(m["gray"].shape, 190, np.uint8),
+            (70 + m["coh"] * 185).astype(np.uint8)], -1)
+        imgs["orient"] = _save(f"bench_{cp.stem}_orient.png",
+                               cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR))
+        imgs["trace"] = _save(f"bench_{cp.stem}_trace.png",
+                              (~trace_ink * 255).astype(np.uint8))
+        imgs["greedy"] = _save(f"bench_{cp.stem}_greedy.png",
+                               (~greedy_ink * 255).astype(np.uint8))
+        miss = np.full((*m["ink"].shape, 3), 255, np.uint8)
+        miss[m["ink"] & ~greedy_ink] = (60, 60, 230)   # missed ink: red
+        miss[~m["ink"] & greedy_ink] = (230, 140, 40)  # spurious: blue
+        imgs["diff"] = _save(f"bench_{cp.stem}_diff.png", miss)
+
+        row = {"name": cp.stem, "imgs": imgs, "measure": m["stats"],
+               "trace": trace_stats, "greedy": greedy_stats}
+        cache.write_text(json.dumps(row, indent=1))
+        out.append(row)
+    return {"crops": out}
+
+
 # -------------------------------------------------------------- starred ----
 STARS_PATH = Path(__file__).parent / "stars.json"
 
@@ -610,7 +663,8 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("strokes", "marks", "pipeline", "iterations", "starred")
+SECTIONS = ("strokes", "bench", "marks", "pipeline", "iterations",
+            "starred")
 
 
 def build(sections=SECTIONS) -> Path:
@@ -622,6 +676,8 @@ def build(sections=SECTIONS) -> Path:
 
     if "strokes" in sections:
         man["sections"]["strokes"] = build_strokes()
+    if "bench" in sections:
+        man["sections"]["bench"] = build_bench()
     if "marks" in sections:
         man["sections"]["marks"] = build_marks()
     if "pipeline" in sections:

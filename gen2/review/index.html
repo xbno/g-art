@@ -92,6 +92,7 @@ const pj = (o) => esc(JSON.stringify(o).replace(/[{}"]/g,'').replace(/,/g,'  '))
 
 const TABS = {
   strokes:    'strokes',
+  bench:      'bench',
   marks:      'marks',
   pipeline:   'pipeline',
   translation:'translation',
@@ -127,6 +128,39 @@ function strokesView(st) {
       h += `<div class="card">${img(c.img)}
             <div class="t">${c.kind}</div>
             <div class="s">${esc(c.doc)}</div></div>`;
+    h += `</div>`;
+  }
+  return h;
+}
+
+// ---------------- bench (re-ink) ----------------
+function benchView(b) {
+  if (!b.crops || !b.crops.length)
+    return '<div class="note">no crops in refs/crops/ — add reference crops and rebuild</div>';
+  let h = `<div class="note">the re-ink bench: can the vocabulary reproduce
+    each reference crop? <b>trace</b> = the crop's own skeleton replotted
+    (ceiling + ground-truth stroke count; crossings split segments).
+    <b>greedy</b> = OUR strokes placed by deficit along the measured
+    orientation field. recall = black covered; precision = white
+    respected; economy = our strokes ÷ artist's segments (lower is
+    better). The trace-vs-greedy gap, per crop, IS the measured
+    vocabulary gap.</div>`;
+  for (const c of b.crops) {
+    h += `<h2>${c.name} <span class="badge">pen scale
+          ${c.measure.px_per_mm}px/mm</span>
+          <span class="badge">${c.measure.size_mm[0]}×${c.measure.size_mm[1]}mm</span></h2>
+      <div class="grid">`;
+    const cards = [
+      [c.imgs.crop, 'reference crop', `ink ${(c.measure.ink_frac*100).toFixed(0)}% · ${c.measure.segments} segments · med ${c.measure.seg_len_mm_med}mm`],
+      [c.imgs.skeleton, 'skeleton', 'centerlines (red)'],
+      [c.imgs.orient, 'orientation field', 'hue = stroke direction, bright = coherent'],
+      [c.imgs.trace, `trace replot — R ${c.trace.recall} · P ${c.trace.precision}`, `${c.trace.strokes} strokes · ${c.trace.path_mm}mm of path (the ceiling)`],
+      [c.imgs.greedy, `greedy vocab — R ${c.greedy.recall} · P ${c.greedy.precision}`, `${c.greedy.strokes} strokes · economy ×${c.greedy.economy} (ours, hand_line only)`],
+      [c.imgs.diff, 'greedy diff', 'red = ink we missed · blue = ink we invented'],
+    ];
+    for (const [im, t, s] of cards)
+      h += `<div class="card stagecard">${img(im)}<div class="t">${t}</div>
+            <div class="s">${esc(s)}</div></div>`;
     h += `</div>`;
   }
   return h;
@@ -303,6 +337,7 @@ function render() {
   const S = MAN.sections || {};
   try {
     if (TAB === 'strokes') m.innerHTML = S.strokes ? strokesView(S.strokes) : 'not built';
+    else if (TAB === 'bench') m.innerHTML = S.bench ? benchView(S.bench) : 'not built';
     else if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
