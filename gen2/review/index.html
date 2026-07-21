@@ -113,21 +113,19 @@ function img(src, cls='') {
 
 // ---------------- strokes (L0) ----------------
 function strokesView(st) {
-  let h = `<h2>the stroke alphabet (L0) — one atom per kind, 18mm</h2>
-    <div class="note">docs/vocabulary.md · every stroke is one pen-down →
-    pen-up path in a local frame; arrangements (L1) will place them.
-    Drawn CLEAN — humanize is a downstream pass. The gate question:
-    what's missing from this alphabet?</div><div class="scalestrip">`;
-  for (const c of st.strip)
-    h += `<div class="sw">${img(c.img)}<b>${c.kind}</b></div>`;
-  h += `</div>`;
-  for (const k of st.kinds) {
-    h += `<h2 style="border:none;margin-bottom:2px">${k.kind}</h2>
-      <div class="note">${esc(k.doc)} · lengths 6 / 12 / 20mm</div>
-      <div class="grid">`;
-    for (const c of k.cells)
+  let h = `<h2>the stroke alphabet (L0) — ${st.total} kinds</h2>
+    <div class="note">docs/vocabulary.md · a stroke is one GESTURE (1-few
+    pen touches). Each cell: the same kind at three seeds — intrinsic
+    variation is part of the kind. Drawn clean at real pen scale;
+    humanize is a downstream pass; PARALLELING/grouping is L1 and not
+    shown here. Gate question: which kinds are keepers, which are
+    clip-art, what's still missing?</div>`;
+  for (const f of st.families) {
+    h += `<h2>${f.family} (${f.kinds.length})</h2><div class="grid">`;
+    for (const c of f.kinds)
       h += `<div class="card">${img(c.img)}
-            <div class="s">${esc(c.label)}</div></div>`;
+            <div class="t">${c.kind}</div>
+            <div class="s">${esc(c.doc)}</div></div>`;
     h += `</div>`;
   }
   return h;

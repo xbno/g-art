@@ -51,32 +51,38 @@ Cross-cutting (apply at every level, never baked in):
 
 ## L0 — STROKE (the atom)
 
-A stroke is ONE pen-down→pen-up path, generated in a local frame (origin
-at start, direction +x, mm units), placed by L1 via rigid transform.
-Registry: `engine/strokes.py:STROKES`.
+A stroke is ONE GESTURE — 1..few pen touches (a broken line, a
+cross-tick, a tuft are single gestures with lifts) — generated in a local
+frame (origin at start, direction +x, mm units), placed by L1 via rigid
+transform. Registry: `engine/strokes.py:STROKES`, grouped by family
+(~70 kinds; the registry is the truth, this table just names the families):
 
-| kind       | intuition                          | key params |
-|------------|------------------------------------|-----------|
-| line       | ruled hatch atom                   | length |
-| arc        | bowed stroke, engraver's shading   | bow (±sagitta/len) |
-| crescent   | open C, scumbling atom             | sweep_deg |
-| s_curve    | calligraphic double bend           | amp |
-| wave       | sine along length (gen1 "wavy")    | amp, cycles |
-| zigzag     | triangle wave, nervous fill        | amp, cycles |
-| scallop    | repeated bumps: scales, foliage    | bump_len, amp |
-| loop       | cursive e-loops (trochoid)         | loop_h, pitch |
-| spiral     | coiled dab, wool/foliage           | turns, spacing |
-| tick       | straight + end flick               | flick_frac, flick_deg |
-| noise_line | random-walk drift (gen1 "noisy")   | amp, corr_mm |
-| dot        | stipple dab (tiny closed loop)     | d |
+| family    | contents |
+|-----------|----------|
+| geometric | analytic references: line arc crescent s_curve sine zigzag spiral dot |
+| ruled     | hatching atoms with hand character: hand/taper/flick lines, j_entry, fishhook, engraver's swell, wedge dab, double/sketch/broken lines, dry_brush, stitch_run |
+| curved    | single-bend gestures: hand_arc, hook_tail, ogee, sumi comma, teardrop, lash, whip, catenary, ribbon_s, c_flick |
+| wave      | uneven periodics: hand_wave, ripple, swell, chirp, serpentine, crimp, seismo, flame_wave |
+| zigzag    | angular runs: hand_zigzag, lightning, sawtooth, staircase, crenel, needle_run |
+| bump      | scallop kin: hand_scallop, cloud_run, fish_scale, garland, wave_crest |
+| loop      | trochoid kin: hand_loop, chain, figure-8, knot_line, coil, curlicue, pigtail |
+| spot      | dabs: hand_spiral, bean, pebble, squiggle_dab, cross/asterisk ticks, tuft |
+| organic   | noise-native: fbm_ridge, jitter_walk, bark_line, root_line, hairline, meander_scribble |
 
-L0 operations: `scale`, `mirror`, `reverse`, `bend` (constant curvature
-applied post-hoc), param jitter (rng). NOT operations here: wobble
-(humanize), tapering pressure (plotter can't), color (pen is L3 assignment).
+Machinery every kind shares: `_fbm` (1D fractional-Brownian noise — the
+organic backbone), `_uneven_phase` (periodics that breathe instead of
+ticking), `_from_heading` (curvature-space construction: knots, hooks,
+bark), `_roughen`/`_hand` (normal-displacement character). Character
+(drift, per-cycle unevenness, entry/exit behavior) lives IN the kind;
+page-space wobble stays in humanize. Intrinsic rng variation is part of
+what a kind is — the review sheet shows three seeds per kind.
 
-Gate: the full alphabet × param sweeps on one sheet in the review UI
-(strokes tab). Question: which kinds are missing? (candidates already
-noted for later: hook, wedge/triangle-fill, cross-tick, stab.)
+L0 operations: `scale`, `mirror`, `reverse`, param jitter (rng). NOT
+operations here: wobble (humanize), pressure taper (plotter can't — the
+engraver's swell fakes it with geometry), color (pen is L3 assignment).
+
+Gate: the family sheets in the review strokes tab. Questions: which kinds
+are keepers, which are still clip-art, what's missing?
 
 ## L1 — ARRANGEMENT (pattern = arrangement × stroke × spacing-law)
 

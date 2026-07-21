@@ -114,47 +114,56 @@ def _boundaries(labels):
 
 
 # -------------------------------------------------------------- strokes ----
+STROKE_SPOT_MM = 3.5  # footprint for spot/dab kinds
+
+
 def build_strokes() -> dict:
-    """L0 of the vocabulary ladder: the full stroke alphabet, each kind
-    swept over its primary parameter, drawn clean at real pen scale
+    """L0 of the vocabulary ladder: the full stroke alphabet grouped by
+    family. Each cell shows THREE seeds of the same kind — intrinsic
+    variation is part of what a kind is. Drawn clean at real pen scale
     (humanize is a downstream pass and deliberately absent here)."""
-    from engine.strokes import STROKES, SWEEP, stroke as mk
+    from engine.strokes import FAMILY, STROKES, stroke as mk
 
     scale = 12.0  # px per mm
     ink = (26, 26, 26)
 
-    def draw(img, pts, x_mm, y_mm):
-        pp = pts * scale
-        pp = np.stack([pp[:, 0] + x_mm * scale,
-                       y_mm * scale - pp[:, 1]], 1)
-        cv2.polylines(img, [np.round(pp).astype(np.int32)], False, ink, 2,
-                      cv2.LINE_AA)
+    def draw(img, gesture, x_mm, y_mm):
+        for pts in gesture:
+            pp = np.stack([pts[:, 0] * scale + x_mm * scale,
+                           y_mm * scale - pts[:, 1] * scale], 1)
+            cv2.polylines(img, [np.round(pp).astype(np.int32)], False,
+                          ink, 2, cv2.LINE_AA)
 
-    kinds = []
-    strip_cells = []
-    for kind in STROKES:
-        pkey, vals = SWEEP[kind]
-        lengths = [0.4, 0.7, 1.0] if kind == "dot" else [6.0, 12.0, 20.0]
+    families = []
+    for fam, kinds in FAMILY.items():
         cells = []
-        for i, v in enumerate([None] if not vals else vals):
-            params = {pkey: v} if pkey and v is not None else {}
-            img = np.full((250, 310, 3), 255, np.uint8)
-            for j, ln in enumerate(lengths):
-                n_rng = 3 if kind == "noise_line" else 1
-                for k in range(n_rng):
-                    pts = mk(kind, ln, params, np.random.default_rng(k))
-                    draw(img, pts, 2.0, 6.0 + j * 6.5 + k * 1.8)
-            cells.append({"label": f"{pkey}={v}" if pkey else "default",
-                          "img": _save(f"stroke_{kind}_{i}.png", img)})
-        kinds.append({"kind": kind, "cells": cells,
-                      "doc": (STROKES[kind].__doc__ or "").split("\n")[0]})
-        simg = np.full((160, 300, 3), 255, np.uint8)
-        pts = mk(kind, 1.0 if kind == "dot" else 18.0, {},
-                 np.random.default_rng(1))
-        draw(simg, pts, 3.0, 7.0)
-        strip_cells.append({"kind": kind,
-                            "img": _save(f"stroke_strip_{kind}.png", simg)})
-    return {"kinds": kinds, "strip": strip_cells}
+        for kind in kinds:
+            ln = STROKE_SPOT_MM if fam == "spot" \
+                or kind in ("dot", "spiral") else 18.0
+            gs = [mk(kind, ln, {}, np.random.default_rng(100 + k))
+                  for k in range(3)]
+            # auto row layout from real extents — kinds keep true mm
+            # scale but tall gestures get the room they need
+            his, los = [], []
+            for g in gs:
+                ys = np.concatenate([p[:, 1] for p in g])
+                his.append(ys.max()); los.append(ys.min())
+            y = 1.2
+            h_rows = []
+            for hi, lo in zip(his, los):
+                y += hi + 0.8
+                h_rows.append(y)
+                y += -lo + 0.8
+            img = np.full((int((y + 1.2) * scale), 300, 3), 255, np.uint8)
+            for g, ry in zip(gs, h_rows):
+                draw(img, g, 3.0, ry)
+            cells.append({"kind": kind,
+                          "doc": (STROKES[kind].__doc__ or ""
+                                  ).split("\n")[0],
+                          "img": _save(f"stroke_{kind}.png", img)})
+        families.append({"family": fam, "kinds": cells})
+    total = sum(len(f["kinds"]) for f in families)
+    return {"families": families, "total": total}
 
 
 # ---------------------------------------------------------------- marks ----
