@@ -466,7 +466,7 @@ def build_bench() -> dict:
     crops_dir = ROOT / "refs" / "crops"
     if not crops_dir.exists():
         return {"crops": []}
-    ver = "1"
+    ver = "2"
     out = []
     for cp in sorted(crops_dir.glob("*.png")):
         tag = hashlib.sha1(ver.encode() + cp.read_bytes()).hexdigest()[:10]
