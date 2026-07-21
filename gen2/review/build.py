@@ -639,7 +639,14 @@ def build(sections=SECTIONS) -> Path:
     man["generated"] = datetime.now(timezone.utc).isoformat()
     man["active"] = [{"genome": g, "photo": p, "seed": s}
                      for g, p, s in ACTIVE]
+    # stamp the UI version into both page and manifest: an open tab that
+    # polls the manifest reloads ITSELF when the page code changes (data
+    # auto-refresh alone leaves stale JS running against new manifests)
+    src = (Path(__file__).parent / "index.html").read_text()
+    ui_ver = hashlib.sha1(src.encode()).hexdigest()[:10]
+    man["ui"] = ui_ver
     man_p.write_text(json.dumps(man, indent=1))
-    shutil.copy(Path(__file__).parent / "index.html", OUT / "index.html")
+    (OUT / "index.html").write_text(
+        src.replace("__UI_VERSION__", ui_ver))
     log.info("review site -> %s", OUT / "index.html")
     return OUT
