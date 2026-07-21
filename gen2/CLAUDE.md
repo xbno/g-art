@@ -72,6 +72,15 @@ Milestones (design.md §7): M0 engine substrate ✅ → M1 module architecture �
 M2 headless evolution CLI ✅ → M3 procedural/hybrid sources → M4 UI →
 M5 steering → M6 code mutations.
 
+**Current focus (2026-07): the vocabulary ladder — docs/vocabulary.md.**
+Rebuild bottom-up with visual gates: L0 strokes (`engine/strokes.py`,
+review strokes tab) → L1 arrangements (factor modules into
+arrangement × stroke × spacing-law) → L2 regions (gen1 ops: z-occlusion,
+material-union hatching, composite outline; abstract testbed) → L3 forms
+→ L4 composition. No level advances until the user signs off on its
+review-UI sheet. Evolution restarts only at L4, over the full factored
+genome.
+
 ## Visual quality rubric (score 0–2 each)
 
 - Lines follow form/field, not one global angle (unless genome says so)

@@ -113,6 +113,50 @@ def _boundaries(labels):
                              cv2.MORPH_GRADIENT, k) > 0)
 
 
+# -------------------------------------------------------------- strokes ----
+def build_strokes() -> dict:
+    """L0 of the vocabulary ladder: the full stroke alphabet, each kind
+    swept over its primary parameter, drawn clean at real pen scale
+    (humanize is a downstream pass and deliberately absent here)."""
+    from engine.strokes import STROKES, SWEEP, stroke as mk
+
+    scale = 12.0  # px per mm
+    ink = (26, 26, 26)
+
+    def draw(img, pts, x_mm, y_mm):
+        pp = pts * scale
+        pp = np.stack([pp[:, 0] + x_mm * scale,
+                       y_mm * scale - pp[:, 1]], 1)
+        cv2.polylines(img, [np.round(pp).astype(np.int32)], False, ink, 2,
+                      cv2.LINE_AA)
+
+    kinds = []
+    strip_cells = []
+    for kind in STROKES:
+        pkey, vals = SWEEP[kind]
+        lengths = [0.4, 0.7, 1.0] if kind == "dot" else [6.0, 12.0, 20.0]
+        cells = []
+        for i, v in enumerate([None] if not vals else vals):
+            params = {pkey: v} if pkey and v is not None else {}
+            img = np.full((250, 310, 3), 255, np.uint8)
+            for j, ln in enumerate(lengths):
+                n_rng = 3 if kind == "noise_line" else 1
+                for k in range(n_rng):
+                    pts = mk(kind, ln, params, np.random.default_rng(k))
+                    draw(img, pts, 2.0, 6.0 + j * 6.5 + k * 1.8)
+            cells.append({"label": f"{pkey}={v}" if pkey else "default",
+                          "img": _save(f"stroke_{kind}_{i}.png", img)})
+        kinds.append({"kind": kind, "cells": cells,
+                      "doc": (STROKES[kind].__doc__ or "").split("\n")[0]})
+        simg = np.full((160, 300, 3), 255, np.uint8)
+        pts = mk(kind, 1.0 if kind == "dot" else 18.0, {},
+                 np.random.default_rng(1))
+        draw(simg, pts, 3.0, 7.0)
+        strip_cells.append({"kind": kind,
+                            "img": _save(f"stroke_strip_{kind}.png", simg)})
+    return {"kinds": kinds, "strip": strip_cells}
+
+
 # ---------------------------------------------------------------- marks ----
 SWATCH_MM = 40.0
 CELL = 300
@@ -557,7 +601,7 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("marks", "pipeline", "iterations", "starred")
+SECTIONS = ("strokes", "marks", "pipeline", "iterations", "starred")
 
 
 def build(sections=SECTIONS) -> Path:
@@ -567,6 +611,8 @@ def build(sections=SECTIONS) -> Path:
     man = (json.loads(man_p.read_text()) if man_p.exists()
            else {"sections": {}})
 
+    if "strokes" in sections:
+        man["sections"]["strokes"] = build_strokes()
     if "marks" in sections:
         man["sections"]["marks"] = build_marks()
     if "pipeline" in sections:

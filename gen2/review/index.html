@@ -84,15 +84,16 @@
 <div id="toast"></div>
 
 <script>
-let MAN = null, TAB = location.hash.slice(1) || 'pipeline';
+let MAN = null, TAB = location.hash.slice(1) || 'strokes';
 const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
 const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const pj = (o) => esc(JSON.stringify(o).replace(/[{}"]/g,'').replace(/,/g,'  '));
 
 const TABS = {
+  strokes:    'strokes',
+  marks:      'marks',
   pipeline:   'pipeline',
   translation:'translation',
-  marks:      'marks',
   starred:    'starred',
   iterations: 'iterations',
 };
@@ -108,6 +109,28 @@ function nav() {
 
 function img(src, cls='') {
   return `<img loading="lazy" class="${cls}" src="${src}" onclick="lb('${src}')">`;
+}
+
+// ---------------- strokes (L0) ----------------
+function strokesView(st) {
+  let h = `<h2>the stroke alphabet (L0) — one atom per kind, 18mm</h2>
+    <div class="note">docs/vocabulary.md · every stroke is one pen-down →
+    pen-up path in a local frame; arrangements (L1) will place them.
+    Drawn CLEAN — humanize is a downstream pass. The gate question:
+    what's missing from this alphabet?</div><div class="scalestrip">`;
+  for (const c of st.strip)
+    h += `<div class="sw">${img(c.img)}<b>${c.kind}</b></div>`;
+  h += `</div>`;
+  for (const k of st.kinds) {
+    h += `<h2 style="border:none;margin-bottom:2px">${k.kind}</h2>
+      <div class="note">${esc(k.doc)} · lengths 6 / 12 / 20mm</div>
+      <div class="grid">`;
+    for (const c of k.cells)
+      h += `<div class="card">${img(c.img)}
+            <div class="s">${esc(c.label)}</div></div>`;
+    h += `</div>`;
+  }
+  return h;
 }
 
 // ---------------- marks ----------------
@@ -280,7 +303,8 @@ function render() {
     'built ' + (MAN.generated || '').slice(0, 19).replace('T', ' ') + 'Z';
   const S = MAN.sections || {};
   try {
-    if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
+    if (TAB === 'strokes') m.innerHTML = S.strokes ? strokesView(S.strokes) : 'not built';
+    else if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
     else if (TAB === 'starred') m.innerHTML = starredView(S.starred || {});
