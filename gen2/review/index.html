@@ -188,7 +188,19 @@ function patchesView(p) {
   for (const t of p.transfer)
     h += `<tr><td class="l">${t.from}</td>`
        + t.losses.map(l => `<td>${l}</td>`).join('') + `</tr>`;
-  return h + `</table>`;
+  h += `</table>`;
+  if (p.combs) {
+    h += `<h2>comb-cover — patches without boundaries</h2>
+      <div class="note">annotated reference | our comb re-ink (combs =
+      one-gesture patches of parallel strokes, fBm footprints, deficit
+      placement, angle-contrast rule, mixed overshoot/stop-short margins)
+      | free generation on a random field.
+      recon: ${p.combs.recon.combs} combs / ${p.combs.recon.strokes}
+      strokes · R ${p.combs.recon.recall} · P ${p.combs.recon.precision}
+      </div>
+      <div class="card" style="width:100%">${img(p.combs.img)}</div>`;
+  }
+  return h;
 }
 
 // ---------------- marks ----------------

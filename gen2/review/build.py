@@ -542,6 +542,40 @@ def build_bench() -> dict:
                 row.append(round(sc["loss"], 3))
             patches["transfer"].append({"from": a, "losses": row})
         patches["names"] = names
+
+    # comb-cover: the emergent-boundary patch arrangement, validated
+    # against the user's annotated rockface + shown generating freely
+    anno = ROOT / "refs" / "patches" / "rockface_anno.png"
+    if anno.exists():
+        from bench.combs import comb_cover, strip_annotation
+        from bench.measure import orientation_field, stroke_width_px
+        bgr = cv2.imread(str(anno))
+        clean = strip_annotation(bgr)
+        gray = cv2.cvtColor(clean, cv2.COLOR_BGR2GRAY
+                            ).astype(np.float32) / 255
+        lo, hi = np.percentile(gray, [8, 92])
+        ink_m = gray < (lo + hi) / 2
+        w_px, _ = stroke_width_px(ink_m)
+        th, _coh = orientation_field(gray, sigma_px=max(w_px * 2, 3))
+        recon, _placed, cst = comb_cover(ink_m, th, w_px,
+                                         np.random.default_rng(7))
+        hh, ww = ink_m.shape
+        noise = cv2.GaussianBlur(np.random.default_rng(3)
+                                 .standard_normal((hh, ww))
+                                 .astype(np.float32), (0, 0), 40)
+        th_g = (noise - noise.min()) / (noise.max() - noise.min()) * np.pi
+        gen, _p2, gst = comb_cover(np.ones((hh, ww), bool), th_g, w_px,
+                                   np.random.default_rng(11),
+                                   stop_deficit=0.42)
+        gp = np.full((hh, 10, 3), 255, np.uint8)
+        panel = np.concatenate(
+            [bgr, gp, cv2.cvtColor((~recon * 255).astype(np.uint8),
+                                   cv2.COLOR_GRAY2BGR),
+             gp, cv2.cvtColor((~gen * 255).astype(np.uint8),
+                              cv2.COLOR_GRAY2BGR)], 1)
+        patches["combs"] = {
+            "img": _save("combs_panel.png", panel),
+            "recon": cst, "gen": gst}
     return {"crops": out, "patches": patches}
 
 
