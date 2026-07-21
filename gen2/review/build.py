@@ -504,7 +504,45 @@ def build_bench() -> dict:
                "trace": trace_stats, "greedy": greedy_stats}
         cache.write_text(json.dumps(row, indent=1))
         out.append(row)
-    return {"crops": out}
+
+    # micro-patch fits (refs/patches/): forms -> parametric hatch fit ->
+    # leak/miss scores -> style-transfer matrix
+    patches = {"rows": [], "transfer": []}
+    pdir = ROOT / "refs" / "patches"
+    ppaths = sorted(pdir.glob("*.png")) if pdir.exists() else []
+    if ppaths:
+        from bench.fit import fit_patch, transfer
+        fits = {}
+        for pp in ppaths:
+            f = fit_patch(pp)
+            fits[pp.stem] = (f, pp)
+            h, w = f["ink"].shape
+            gap = np.full((h, 8, 3), 255, np.uint8)
+            lab = cv2.applyColorMap((f["labels"] * 80 + 40).astype(np.uint8),
+                                    cv2.COLORMAP_TURBO)
+            diff = np.full((h, w, 3), 255, np.uint8)
+            diff[f["ink"] & ~f["render"]] = (60, 60, 230)
+            diff[~f["ink"] & f["render"]] = (230, 140, 40)
+            panel = np.concatenate(
+                [f["bgr"], gap, lab, gap,
+                 cv2.cvtColor((~f["render"] * 255).astype(np.uint8),
+                              cv2.COLOR_GRAY2BGR), gap, diff], 1)
+            panel = cv2.resize(panel, None, fx=2, fy=2,
+                               interpolation=cv2.INTER_NEAREST)
+            patches["rows"].append({
+                "name": pp.stem, "k": f["k"],
+                "img": _save(f"fitpatch_{pp.stem}.png", panel),
+                "forms": f["forms"], "score": f["score"]})
+        names = list(fits)
+        for a in names:
+            row = []
+            for b in names:
+                sc = (fits[a][0]["score"] if a == b
+                      else transfer(fits[a][0], fits[b][1]))
+                row.append(round(sc["loss"], 3))
+            patches["transfer"].append({"from": a, "losses": row})
+        patches["names"] = names
+    return {"crops": out, "patches": patches}
 
 
 # -------------------------------------------------------------- starred ----

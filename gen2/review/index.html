@@ -163,7 +163,32 @@ function benchView(b) {
             <div class="s">${esc(s)}</div></div>`;
     h += `</div>`;
   }
-  return h;
+  return h + patchesView(b.patches);
+}
+
+function patchesView(p) {
+  if (!p || !p.rows || !p.rows.length) return '';
+  let h = `<h2>micro-patch fits (scaleless: stroke width w is the unit)</h2>
+    <div class="note">each patch: reference | forms found | parametric
+    re-ink (θ-field + s/w + phase per form) | diff (red = missed ink,
+    blue = leaked ink). Below: the transfer matrix — style ratios from
+    row's fit applied to column's patch, content (angles/phase) re-fit.
+    Diagonal = self-fit. If off-diagonal ≈ diagonal, the ratios are the
+    artist's invariant.</div><div class="grid">`;
+  for (const r of p.rows) {
+    const forms = r.forms.map(f =>
+      `θ${f.params.theta_deg}° s/w ${f.params.s_over_w} (${(f.frac*100).toFixed(0)}%)`).join(' · ');
+    h += `<div class="card" style="width:640px">${img(r.img)}
+      <div class="t">${r.name} — ${r.k} form${r.k>1?'s':''} ·
+      miss ${r.score.miss} · leak ${r.score.leak}</div>
+      <div class="s">${forms}</div></div>`;
+  }
+  h += `</div><table><tr><th class="l">style from ↓ on →</th>`
+     + p.names.map(n => `<th>${n}</th>`).join('') + `</tr>`;
+  for (const t of p.transfer)
+    h += `<tr><td class="l">${t.from}</td>`
+       + t.losses.map(l => `<td>${l}</td>`).join('') + `</tr>`;
+  return h + `</table>`;
 }
 
 // ---------------- marks ----------------
