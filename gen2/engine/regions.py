@@ -149,6 +149,62 @@ def poly_grid(w_mm: float, h_mm: float, rng: np.random.Generator,
     return cells, neighbors
 
 
+def aniso_mesh(w_mm: float, h_mm: float, rng: np.random.Generator,
+               n_parents: int = 90, pad_mm: float = 8.0):
+    """Anisotropic patch field — the reference-artist cell geometry:
+    patches ELONGATED ALONG their own stroke direction, directions
+    drifting coherently across the sheet (smooth fBm field) but
+    committed per patch. Built as Voronoi of collinear seed CLUSTERS
+    (sub-cells unioned per parent = stretched cells).
+    -> (cells, neighbors, theta_per_cell)."""
+    from scipy.ndimage import gaussian_filter
+
+    gh, gw = 20, 28
+    ca = gaussian_filter(rng.standard_normal((gh, gw)), 2.5)
+    cb = gaussian_filter(rng.standard_normal((gh, gw)), 2.5)
+
+    def field(x, y):
+        gx = np.clip(x / w_mm * (gw - 1), 0, gw - 1.001)
+        gy = np.clip(y / h_mm * (gh - 1), 0, gh - 1.001)
+        x0, y0 = int(gx), int(gy)
+        fx, fy = gx - x0, gy - y0
+        def bl(m):
+            return (m[y0, x0] * (1 - fx) * (1 - fy)
+                    + m[y0, x0 + 1] * fx * (1 - fy)
+                    + m[y0 + 1, x0] * (1 - fx) * fy
+                    + m[y0 + 1, x0 + 1] * fx * fy)
+        return 0.5 * np.arctan2(bl(cb), bl(ca))
+
+    parents = np.stack([rng.uniform(pad_mm, w_mm - pad_mm, n_parents),
+                        rng.uniform(pad_mm, h_mm - pad_mm, n_parents)], 1)
+    thetas = np.array([field(*p) for p in parents])
+    subs, owner = [], []
+    for i, p in enumerate(parents):
+        spread = float(rng.choice([0, 4, 8, 13, 19],
+                                  p=[.18, .25, .27, .2, .1]))
+        k = 1 + int(spread / 4)
+        u = np.array([np.cos(thetas[i]), np.sin(thetas[i])])
+        ts = np.linspace(-0.5, 0.5, k) if k > 1 else [0.0]
+        for t in ts:
+            subs.append(p + u * spread * t)
+            owner.append(i)
+    sub_cells, sub_nb = voronoi_mesh(w_mm, h_mm, np.array(subs), pad_mm)
+    cells = [None] * n_parents
+    for j, c in enumerate(sub_cells):
+        if c is None:
+            continue
+        i = owner[j]
+        cells[i] = c if cells[i] is None else unary_union([cells[i], c])
+    neighbors = [set() for _ in range(n_parents)]
+    for j, nbs in enumerate(sub_nb):
+        for q in nbs:
+            a, b = owner[j], owner[q]
+            if a != b and cells[a] is not None and cells[b] is not None:
+                neighbors[a].add(b)
+                neighbors[b].add(a)
+    return cells, neighbors, thetas
+
+
 def voronoi_mesh(w_mm: float, h_mm: float, seeds: np.ndarray,
                  pad_mm: float = 8.0):
     """Voronoi cells from arbitrary seed points (mm), clipped to the

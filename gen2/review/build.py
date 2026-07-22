@@ -479,6 +479,37 @@ def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0, outline=True):
     return {"black03": hatch + rings}
 
 
+def _aniso_sheet(seed: int, mix: bool, w_mm=190.0, h_mm=130.0):
+    """The reference-artist patch geometry: elongated-along-direction
+    cells over a coherent drifting field, committed angles, NO outlines.
+    mix=True adds sparse tonal variety (occasional bare / tight cells)."""
+    from engine.hatch import fixed_hatch
+    from engine.regions import aniso_mesh
+
+    rng = np.random.default_rng(seed)
+    cells, neighbors, thetas = aniso_mesh(w_mm, h_mm, rng)
+    angle = [None] * len(cells)
+    hatch = []
+    for i, c in enumerate(cells):
+        if c is None or c.is_empty:
+            continue
+        ang = round(np.degrees(thetas[i]) / 15) * 15.0
+        for j in neighbors[i]:
+            if angle[j] is not None and \
+                    abs(((ang - angle[j] + 90) % 180) - 90) < 10:
+                ang += float(rng.choice([-1, 1])) * 15.0
+                break
+        angle[i] = ang
+        sp = 1.15
+        if mix:
+            sp = float(rng.choice([0.0, 0.8, 1.15, 1.15, 1.7],
+                                  p=[.07, .16, .38, .25, .14]))
+            if sp == 0.0:
+                continue
+        hatch += fixed_hatch(c, ang, sp, rng, spacing_jitter=0.05)
+    return {"black03": hatch}
+
+
 def _mesh_sheet(photo: str, seed: int, outline: bool,
                 w_mm=130.0, h_mm=190.0, n_seeds=230):
     """MESHIFY: Voronoi mesh over a photo as if it were a 3D surface —
@@ -623,6 +654,15 @@ def build_abstract() -> dict:
         emit(f"grid_noline_s{seed}", _grid_sheet(seed, outline=False),
              190.0, 130.0, "the same tiling, NO outlines — cells "
              "separate by angle contrast alone")
+
+    # anisotropic patch fields — the reference cell geometry: patches
+    # elongated along their own stroke direction, coherent drift
+    for seed in (1, 2):
+        emit(f"aniso_s{seed}", _aniso_sheet(seed, mix=False),
+             190.0, 130.0, "cells stretched ALONG their hatch direction "
+             "over a drifting field; emergent fold lines, no outlines")
+    emit("aniso_mix", _aniso_sheet(3, mix=True), 190.0, 130.0,
+         "same + sparse tonal variety: occasional bare and tight cells")
 
     # 7. no-outline drop — like the original prints: overlapping objects
     # separate purely by angle contrast, zero outlines
