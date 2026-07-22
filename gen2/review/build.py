@@ -478,6 +478,97 @@ def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0):
     return {"black03": hatch + outline}
 
 
+def _mesh_sheet(photo: str, seed: int, outline: bool,
+                w_mm=130.0, h_mm=190.0, n_seeds=230):
+    """MESHIFY: Voronoi mesh over a photo as if it were a 3D surface —
+    seed density from detail (edges + darkness), per-cell hatch ANGLE
+    from the normals field (fall line — the 3D shading), per-cell
+    SPACING from tone (lightest cells stay bare paper). Neighbor cells
+    are nudged apart when angles nearly collide (ghost-seam invariant)."""
+    import shapely
+
+    from engine.hatch import fixed_hatch
+    from engine.regions import region_outline, voronoi_mesh
+    from engine.scene import load_normals, normals_field
+
+    rng = np.random.default_rng(seed)
+    pp = ROOT / photo
+    bgr = cv2.imread(str(pp))
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+    H, W = gray.shape
+    # cover-fit page mm -> image px
+    s = max(W / (w_mm - 16), H / (h_mm - 16))
+
+    def to_px(xy):
+        return (np.clip((xy[..., 0] - 8) * s, 0, W - 1),
+                np.clip((xy[..., 1] - 8) * s, 0, H - 1))
+
+    nrm = load_normals(str(pp), gray.shape)
+    if nrm is not None:
+        theta, _coh, _var = normals_field(nrm, 1 / s, smooth_mm=6.0)
+    else:
+        from bench.measure import orientation_field
+        theta, _ = orientation_field(gray, sigma_px=8)
+    from engine.scene import load_semantic
+    sem = load_semantic(str(pp), gray.shape)
+    sky = None
+    if sem is not None:
+        ids = [i for i, n in sem["names"].items() if "sky" in n.lower()]
+        sky = np.isin(sem["labels"], ids)
+    edge = cv2.GaussianBlur(np.hypot(
+        cv2.Sobel(cv2.GaussianBlur(gray, (0, 0), 3), cv2.CV_32F, 1, 0),
+        cv2.Sobel(cv2.GaussianBlur(gray, (0, 0), 3), cv2.CV_32F, 0, 1)),
+        (0, 0), 4)
+    edge /= edge.max() + 1e-9
+
+    seeds = []
+    while len(seeds) < n_seeds:
+        p = np.array([rng.uniform(8, w_mm - 8), rng.uniform(8, h_mm - 8)])
+        xi, yi = to_px(p)
+        d = 0.25 + 1.4 * edge[int(yi), int(xi)] \
+            + 0.55 * (1 - gray[int(yi), int(xi)])
+        if rng.uniform() < d / 2.2:
+            seeds.append(p)
+    cells, neighbors = voronoi_mesh(w_mm, h_mm, np.array(seeds))
+
+    SPACINGS = [None, 2.3, 1.5, 1.0]  # tone levels light -> dark
+    angle = [None] * len(cells)
+    hatch, rings = [], []
+    order = [i for i in range(len(cells)) if cells[i] is not None]
+    for i in order:
+        c = cells[i]
+        k = 22
+        minx, miny, maxx, maxy = c.bounds
+        xs = rng.uniform(minx, maxx, k)
+        ys = rng.uniform(miny, maxy, k)
+        inside = shapely.contains_xy(c, xs, ys)
+        if not inside.any():
+            continue
+        px, py = to_px(np.stack([xs[inside], ys[inside]], 1))
+        if sky is not None and \
+                sky[py.astype(int), px.astype(int)].mean() > 0.5:
+            continue  # sky stays bare paper — the surface is the subject
+        g = float(gray[py.astype(int), px.astype(int)].mean())
+        t2 = 2 * theta[py.astype(int), px.astype(int)]
+        ang = float(np.degrees(0.5 * np.arctan2(np.sin(t2).mean(),
+                                                np.cos(t2).mean())))
+        ang = round(ang / 15) * 15.0
+        for j in neighbors[i]:
+            if angle[j] is not None and \
+                    abs(((ang - angle[j] + 90) % 180) - 90) < 10:
+                ang += float(rng.choice([-1, 1])) * 15.0
+                break
+        angle[i] = ang
+        lvl = int(np.clip(np.digitize(1 - g, [0.32, 0.55, 0.75]), 0, 3))
+        sp = SPACINGS[lvl]
+        if sp is not None:
+            hatch += fixed_hatch(c, ang, sp, rng, spacing_jitter=0.05)
+        if outline:
+            rings += region_outline(c)
+    layers = {"black03": hatch + rings}
+    return layers, bgr
+
+
 def build_abstract() -> dict:
     """The faithful-migration test suite (engine/gen1.py + regions.py):
     prove gen1's full capability in gen2 before building past it."""
@@ -527,6 +618,40 @@ def build_abstract() -> dict:
         emit(f"grid_s{seed}", _grid_sheet(seed), 190.0, 130.0,
              "gapless jittered tiling + merges; adjacent cells never "
              "share an angle")
+
+    # 7. no-outline drop — like the original prints: overlapping objects
+    # separate purely by angle contrast, zero outlines
+    rng = np.random.default_rng(5)
+    polys, mats = drop_shapes(
+        190.0, 130.0, rng,
+        kinds=("circle", "square", "triangle", "poly"))
+    lay = scene_layers(polys, mats, rng)
+    lay = {"black03": lay["black03"]}
+    emit("drop_noline", lay, 190.0, 130.0,
+         "no outline anywhere — separation by angle contrast alone")
+
+    # 8-9. MESHIFY: image -> adaptive polygonal mesh -> shaded by the
+    # surface (angle from normals fall-line, spacing from tone)
+    for outline in (False, True):
+        name = f"mesh_peak_{'lines' if outline else 'clean'}"
+        layers, photo_bgr = _mesh_sheet("tests/fixtures/peak_src.png",
+                                        7, outline)
+        page = Page(130.0, 190.0, 0.0, 130.0 / 900, 0.0, 0.0)
+        img = _raster(layers, page, 900)
+        ph = cv2.resize(photo_bgr,
+                        (int(img.shape[0] * photo_bgr.shape[1]
+                             / photo_bgr.shape[0]), img.shape[0]))
+        gapc = np.full((img.shape[0], 10, 3), 255, np.uint8)
+        panel = np.concatenate([ph, gapc, img], 1)
+        write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
+        sheets.append({"name": name,
+                       "note": "meshify: Voronoi cells dense where "
+                       "detail lives; angle = normals fall-line, "
+                       "spacing = tone, lightest cells bare"
+                       + ("" if outline else " · NO outlines"),
+                       "paths": sum(len(v) for v in layers.values()),
+                       "svg": f"svg/{name}.svg",
+                       "img": _save(f"abstract_{name}.png", panel)})
     return {"sheets": sheets}
 
 

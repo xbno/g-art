@@ -12,7 +12,8 @@ All geometry in mm, shapely. Pure: same (params, rng) -> same shapes.
 """
 
 import numpy as np
-from shapely.geometry import Polygon
+import shapely
+from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
 
@@ -145,4 +146,39 @@ def poly_grid(w_mm: float, h_mm: float, rng: np.random.Generator,
             if j is not None and j != i:
                 neighbors[i].add(j)
                 neighbors[j].add(i)
+    return cells, neighbors
+
+
+def voronoi_mesh(w_mm: float, h_mm: float, seeds: np.ndarray,
+                 pad_mm: float = 8.0):
+    """Voronoi cells from arbitrary seed points (mm), clipped to the
+    page — the MESHIFY primitive: seed density carries image structure,
+    so cells are small where detail lives, big where it doesn't.
+    Mirror trick makes every cell finite. -> (cells, neighbors)."""
+    from scipy.spatial import Voronoi
+
+    n = len(seeds)
+    rect = box(pad_mm, pad_mm, w_mm - pad_mm, h_mm - pad_mm)
+    mirrored = [seeds]
+    for axis, lo, hi in ((0, pad_mm, w_mm - pad_mm),
+                         (1, pad_mm, h_mm - pad_mm)):
+        for bound in (lo, hi):
+            m = seeds.copy()
+            m[:, axis] = 2 * bound - m[:, axis]
+            mirrored.append(m)
+    vor = Voronoi(np.concatenate(mirrored))
+    cells = []
+    for i in range(n):
+        verts = vor.regions[vor.point_region[i]]
+        if -1 in verts or not verts:
+            cells.append(None)
+            continue
+        p = Polygon(vor.vertices[verts]).intersection(rect)
+        cells.append(p if not p.is_empty else None)
+    neighbors = [set() for _ in range(n)]
+    for a, b in vor.ridge_points:
+        if a < n and b < n and cells[a] is not None \
+                and cells[b] is not None:
+            neighbors[a].add(int(b))
+            neighbors[b].add(int(a))
     return cells, neighbors
