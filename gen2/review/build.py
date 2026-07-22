@@ -1285,6 +1285,11 @@ def build_brainstorm() -> dict:
     if sp.exists():
         raw = json.loads(sp.read_text())
         stars = {k: [p.get("id") for p in v] for k, v in raw.items()}
+    bp = Path(__file__).parent / "brainstorm_stars.json"
+    if bp.exists():
+        for k, ids in json.loads(bp.read_text()).items():
+            stars.setdefault(k, [])
+            stars[k] += [i for i in ids if i not in stars[k]]
     return {"galleries": gals, "stars": stars}
 
 

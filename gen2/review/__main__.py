@@ -27,16 +27,31 @@ class _NoCache(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_POST(self):
-        if self.path != "/api/tuner":
-            self.send_response(404)
-            self.end_headers()
-            return
         n = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(n)
         try:
             data = json.loads(body)
         except Exception:
             self.send_response(400)
+            self.end_headers()
+            return
+        if self.path == "/api/star":
+            # brainstorm stars persist in the REPO (taste data), never
+            # in browser storage — that lesson is paid for
+            p = Path(__file__).parent / "brainstorm_stars.json"
+            stars = json.loads(p.read_text()) if p.exists() else {}
+            arr = stars.setdefault(data["key"], [])
+            if data.get("on") and data["id"] not in arr:
+                arr.append(data["id"])
+            if not data.get("on") and data["id"] in arr:
+                arr.remove(data["id"])
+            p.write_text(json.dumps(stars, indent=1))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return
+        if self.path != "/api/tuner":
+            self.send_response(404)
             self.end_headers()
             return
         saves = OUT / "tuner_saves"
