@@ -98,6 +98,31 @@ def region_outline(region) -> list[np.ndarray]:
     return _rings(region)
 
 
+def object_scene(objs: list[Polygon], auras: list[float]):
+    """OBJECT-level occlusion with separation treatments (the reference
+    move: the BACKGROUND yields — a near object projects a white 'aura'
+    sliver into everything behind it, while its own fill runs clean to
+    its silhouette; the comic outline lives on the same visible edge).
+
+    objs far -> near; auras[i] = white clearance object i casts onto
+    objects behind it (0 = butt/overlap directly).
+    -> list of (fill_region, visible_region): fill for hatching (with
+    aura carved), visible for outlining (true silhouette)."""
+    n = len(objs)
+    fills, visibles = [None] * n, [None] * n
+    cover = None
+    cover_buf = None
+    for i in range(n - 1, -1, -1):
+        visibles[i] = objs[i] if cover is None \
+            else objs[i].difference(cover)
+        fills[i] = objs[i] if cover_buf is None \
+            else objs[i].difference(cover_buf)
+        b = objs[i].buffer(auras[i]) if auras[i] > 0 else objs[i]
+        cover = objs[i] if cover is None else unary_union([cover, objs[i]])
+        cover_buf = b if cover_buf is None else unary_union([cover_buf, b])
+    return list(zip(fills, visibles))
+
+
 def poly_grid(w_mm: float, h_mm: float, rng: np.random.Generator,
               cell_mm: float = 16.0, pad_mm: float = 10.0,
               jitter: float = 0.32, merge_p: float = 0.22):

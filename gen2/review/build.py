@@ -510,6 +510,79 @@ def _aniso_sheet(seed: int, mix: bool, w_mm=190.0, h_mm=130.0):
     return {"black03": hatch}
 
 
+def _objects_sheet(seed: int, w_mm=190.0, h_mm=130.0):
+    """Grouping: patches -> OBJECTS -> separation treatments. A sky-like
+    background field plus overlapping objects, each filled with its own
+    aniso patch field (interior boundaries stay emergent), each carrying
+    one separation gene at its silhouette:
+      sliver          near object casts a white aura into the background
+      outline         comic bold edge on the visible silhouette
+      sliver+outline  both
+      none            butts directly (control)"""
+    from shapely.geometry import box
+
+    from engine.hatch import fixed_hatch
+    from engine.regions import (aniso_mesh, make_shape, object_scene,
+                                region_outline)
+
+    rng = np.random.default_rng(seed)
+    objs = [box(8, 8, w_mm - 8, h_mm - 8)]   # background sky
+    genes = [("none", 0.0)]
+    GENES = [("sliver", 1.4), ("sliver", 1.4), ("outline", 0.0),
+             ("sliver+outline", 1.4), ("none", 0.0), ("sliver", 1.4)]
+    page_box = box(8, 8, w_mm - 8, h_mm - 8)
+    for gi in range(6):
+        c = (rng.uniform(30, w_mm - 30), rng.uniform(28, h_mm - 28))
+        p = make_shape("poly", c, rng.uniform(45, 92), rng,
+                       irregularity=0.45).intersection(page_box)
+        objs.append(p)
+        genes.append(GENES[gi])
+    pairs = object_scene(objs, [a for _g, a in genes])
+
+    hatch, bold = [], []
+    # background: the artist's sky — long near-horizontal rules
+    hatch += fixed_hatch(pairs[0][0], 2.0, 1.15, rng, spacing_jitter=0.05)
+    for i in range(1, len(objs)):
+        fill, visible = pairs[i]
+        if fill.is_empty:
+            continue
+        bias = rng.uniform(0, 180)
+        cells, neighbors, thetas = aniso_mesh(w_mm, h_mm, rng,
+                                              n_parents=60)
+        angle = [None] * len(cells)
+        covered = None
+        for ci, cell in enumerate(cells):
+            if cell is None:
+                continue
+            cc = cell.intersection(fill)
+            if cc.is_empty:
+                continue
+            ang = round((np.degrees(thetas[ci]) + bias) / 15) * 15.0
+            for j in neighbors[ci]:
+                if angle[j] is not None and \
+                        abs(((ang - angle[j] + 90) % 180) - 90) < 10:
+                    ang += float(rng.choice([-1, 1])) * 15.0
+                    break
+            angle[ci] = ang
+            hatch += fixed_hatch(cc, ang, 1.15, rng, spacing_jitter=0.05)
+            covered = cc if covered is None \
+                else covered.union(cc)
+        # catch-all: mesh cells lost to clipping leave bare holes —
+        # hatch the remainder at the object's bias angle
+        rest = fill if covered is None else fill.difference(covered)
+        if not rest.is_empty and rest.area > 4.0:
+            hatch += fixed_hatch(rest, round(bias / 15) * 15.0, 1.15,
+                                 rng, spacing_jitter=0.05)
+        if "outline" in genes[i][0] and not visible.is_empty:
+            for ring in region_outline(visible):
+                bold.append(ring)
+                bold.append(ring + np.array([0.16, 0.11]))
+    layers = {"black03": hatch}
+    if bold:
+        layers["black05"] = bold
+    return layers
+
+
 def _mesh_sheet(photo: str, seed: int, outline: bool,
                 w_mm=130.0, h_mm=190.0, n_seeds=230):
     """MESHIFY: Voronoi mesh over a photo as if it were a 3D surface —
@@ -613,8 +686,8 @@ def build_abstract() -> dict:
     sheets = []
 
     def emit(name, layers, w_mm, h_mm, note):
-        page = Page(w_mm, h_mm, 0.0, w_mm / 1300, 0.0, 0.0)
-        img = _raster(layers, page, 1300)
+        page = Page(w_mm, h_mm, 0.0, w_mm / 1600, 0.0, 0.0)
+        img = _raster(layers, page, 1600)
         write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
         sheets.append({"name": name, "note": note,
                        "paths": sum(len(v) for v in layers.values()),
@@ -664,6 +737,13 @@ def build_abstract() -> dict:
         emit(f"aniso_s{seed}", _aniso_sheet(seed, mix=False),
              190.0, 130.0, "cells stretched ALONG their hatch direction "
              "over a drifting field; emergent fold lines, no outlines")
+
+    # objects: patch groups + separation treatments (sliver / outline)
+    for seed in (1, 2):
+        emit(f"objects_s{seed}", _objects_sheet(seed), 190.0, 130.0,
+             "patch-filled OBJECTS over a sky field; per-object edge "
+             "gene: white sliver (background yields), comic outline, "
+             "both, or none")
 
     # 7. no-outline drop — like the original prints: overlapping objects
     # separate purely by angle contrast, zero outlines
