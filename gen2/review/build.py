@@ -925,7 +925,10 @@ def build_abstract() -> dict:
 
 # ---------------------------------------------------------------- forms ----
 def _raw_normal_sheet(photo: str, K: int = 10,
-                      value_qs=(0.10, 0.30, 0.60)):
+                      value_qs=(0.10, 0.30, 0.60),
+                      angle_mode: str = "center",
+                      dark_speckle: bool = False,
+                      amp: float = 1.0):
     """PIXEL-TRUE posterize render — zero geometry cleanup, so the
     marigold's character (couloirs, jagged tree texture) survives.
     Per class: exact fall-line angle; value level from relit shade
@@ -963,19 +966,14 @@ def _raw_normal_sheet(photo: str, K: int = 10,
     shade = relight(nrm, best_az, 40.0)
     qs = np.quantile(shade[land], list(value_qs))
 
+    fx = -nrm[..., 0] * nrm[..., 1]   # gravity projected on surface:
+    fy = 1.0 - nrm[..., 1] ** 2       # f = g - (g.n)n, g = (0,1,0)
     S = 2  # supersample
     out = np.full((H * S, W * S), 255, np.uint8)
     diag = int(np.hypot(H, W)) * S
     SP = {1: 15, 2: 10, 3: 6}  # spacing px at 2x, per level
-    for k in range(K):
-        mask = cls == k
-        if not mask.any():
-            continue
-        level = 3 - int(np.digitize(float(shade[mask].mean()), qs))
-        if level <= 0:
-            continue
-        n = ctr[k]
-        th = np.arctan2(n[1], n[0])
+
+    def hatch_mask(mask, th, level):
         d = np.array([np.cos(th), np.sin(th)])
         nv = np.array([-d[1], d[0]])
         canvas = np.zeros((H * S, W * S), np.uint8)
@@ -988,6 +986,52 @@ def _raw_normal_sheet(photo: str, K: int = 10,
         mbig = cv2.resize(mask.astype(np.uint8), (W * S, H * S),
                           interpolation=cv2.INTER_NEAREST)
         out[(canvas > 127) & (mbig > 0)] = 0
+
+    ang_of = {}
+    if angle_mode == "shadow1":
+        # the artist's move (user hypothesis): the WHOLE shadow face is
+        # one committed plunge; the lit side is washed out to paper and
+        # carries only rock speckle
+        shadow = (shade < np.quantile(shade[land], 0.35)) & land
+        t2 = 2 * np.arctan2(fy[shadow], fx[shadow])
+        th = 0.5 * np.arctan2(np.sin(t2).mean(), np.cos(t2).mean())
+        hatch_mask(shadow, float(th), 2)
+        for k in range(K):
+            ang_of[k] = float(th)
+    else:
+        for k in range(K):
+            mask = cls == k
+            if not mask.any():
+                continue
+            if angle_mode == "gravity":
+                t2 = 2 * np.arctan2(fy[mask], fx[mask])
+                th = 0.5 * np.arctan2(np.sin(t2).mean(),
+                                      np.cos(t2).mean())
+            else:
+                n = ctr[k]
+                th = np.arctan2(n[1], n[0])
+            if amp != 1.0:
+                # steepness EXAGGERATION (user): amplify each face's
+                # deviation from horizontal — 45° becomes ~60°, near-
+                # horizontal fields stay put. Not a global steepening.
+                a = ((np.degrees(th) + 90) % 180) - 90
+                a = np.sign(a) * min(90.0, abs(a) * amp)
+                th = np.radians(a)
+            ang_of[k] = float(th)
+            level = 3 - int(np.digitize(float(shade[mask].mean()), qs))
+            if level <= 0:
+                continue
+            hatch_mask(mask, th, level)
+    if dark_speckle:
+        # the artist's mid-slope punctuation: deepest shadow pockets get
+        # L3 hatching regardless of class — texture the downslope
+        deep = (shade < np.quantile(shade[land], 0.06)) & land
+        deep = cv2.morphologyEx(deep.astype(np.uint8), cv2.MORPH_OPEN,
+                                np.ones((2, 2), np.uint8)) > 0
+        for k in range(K):
+            m = deep & (cls == k)
+            if m.sum() > 40:
+                hatch_mask(m, ang_of.get(k, 1.2), 3)
     out = cv2.resize(out, (W, H), interpolation=cv2.INTER_AREA)
     cviz = np.full((H, W, 3), 245, np.uint8)
     for k in range(K):
@@ -1058,7 +1102,7 @@ def build_forms() -> dict:
         if not apath.exists():
             apath.write_bytes(buf.tobytes())
             log.info("forms archive: + %s", apath.name)
-        history = sorted(p.name for p in arch.glob(f"{name}__*.png"))
+        history = [q.name for q in sorted(arch.glob(f"{name}__*.png"), key=lambda q: q.stat().st_mtime)]
         rows.append({
             "name": name, "svg": f"svg/{name}.svg",
             "n_forms": len(plan["forms"]),
@@ -1066,25 +1110,36 @@ def build_forms() -> dict:
             "img": f"experiments/forms/{apath.name}",
             "history": [f"experiments/forms/{h}" for h in history]})
 
-    # pixel-true raw posterize (no polygons — the map's character kept)
-    panel = _raw_normal_sheet("tests/fixtures/peak_src.png", K=10)
-    ok, buf = cv2.imencode(".png", panel)
-    hh = hashlib.sha1(buf.tobytes()).hexdigest()[:8]
-    apath = arch / f"nforms_peak_src_raw10__{hh}.png"
-    if not apath.exists():
-        apath.write_bytes(buf.tobytes())
-        log.info("forms archive: + %s", apath.name)
-    history = sorted(p.name for p in
-                     arch.glob("nforms_peak_src_raw10__*.png"))
-    rows.append({"name": "nforms_peak_src_raw10", "svg": "",
-                 "n_forms": 10, "levels": [0, 1, 2, 3],
-                 "img": f"experiments/forms/{apath.name}",
-                 "history": [f"experiments/forms/{h}" for h in history]})
+    # pixel-true raw posterize variants (no polygons) — append-only
+    RAW = (("raw10", {}),
+           ("raw10_steep", {"angle_mode": "gravity"}),
+           ("raw10_steepdark", {"angle_mode": "gravity",
+                                "dark_speckle": True}),
+           ("raw_shadow1", {"angle_mode": "shadow1",
+                            "dark_speckle": True}),
+           ("raw10_ampdark", {"amp": 1.35, "dark_speckle": True}))
+    for rname, kw in RAW:
+        panel = _raw_normal_sheet("tests/fixtures/peak_src.png", K=10,
+                                  **kw)
+        ok, buf = cv2.imencode(".png", panel)
+        hh = hashlib.sha1(buf.tobytes()).hexdigest()[:8]
+        apath = arch / f"nforms_peak_src_{rname}__{hh}.png"
+        if not apath.exists():
+            apath.write_bytes(buf.tobytes())
+            log.info("forms archive: + %s", apath.name)
+        history = [q.name for q in
+                   sorted(arch.glob(f"nforms_peak_src_{rname}__*.png"),
+                          key=lambda q: q.stat().st_mtime)]
+        rows.append({"name": f"nforms_peak_src_{rname}", "svg": "",
+                     "n_forms": 10, "levels": [0, 1, 2, 3],
+                     "img": f"experiments/forms/{apath.name}",
+                     "history": [f"experiments/forms/{h}"
+                                 for h in history]})
 
     # THE FULL ARCHIVE — every panel ever shown, grouped, regardless of
     # what configs exist today. Nothing leaves this list, ever.
     groups = {}
-    for p in sorted(arch.glob("*.png")):
+    for p in sorted(arch.glob("*.png"), key=lambda q: q.stat().st_mtime):
         base = p.name.rsplit("__", 1)[0]
         groups.setdefault(base, []).append(f"experiments/forms/{p.name}")
     archive = [{"name": k, "versions": v} for k, v in groups.items()]
