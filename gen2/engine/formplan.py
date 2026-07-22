@@ -227,7 +227,8 @@ def build_normal_form_plan(photo_path: str, w_mm: float = 130.0,
                            h_mm: float = 190.0, k: int = 5,
                            blur_mm: float = 5.0,
                            sun=(315.0, 40.0),
-                           snap_deg: float = 15.0) -> dict:
+                           snap_deg: float = 15.0,
+                           value_qs=(0.10, 0.30, 0.60)) -> dict:
     """FORMING v2 — the user's call: the watershed masses were unrelated
     to the image (tossed; kept only as the negative example). The
     Marigold NORMALS are the form signal: posterize surface direction
@@ -255,6 +256,8 @@ def build_normal_form_plan(photo_path: str, w_mm: float = 130.0,
     ns = cv2.GaussianBlur(nrm, (0, 0), max(blur_mm * s, 1.0))
     feats = ns[land].reshape(-1, 3).astype(np.float32)
     crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-3)
+    cv2.setRNGSeed(7)  # kmeans++ eats cv2's GLOBAL rng — seed per call
+    # or adding one experiment silently reshuffles every later one
     _c, lab, _ctr = cv2.kmeans(feats, k, None, crit, 4,
                                cv2.KMEANS_PP_CENTERS)
     cls = np.zeros((H, W), np.int32)
@@ -304,9 +307,9 @@ def build_normal_form_plan(photo_path: str, w_mm: float = 130.0,
             best_az, best_c = float(az), c
     shade = relight(nrm, best_az, sun[1])
     log.info("sun azimuth fit: %d deg (corr %.2f)", int(best_az), best_c)
-    # paper-heavy value distribution like the reference: ~40% bare,
-    # ~30% L1, ~20% L2, only the darkest ~10% at L3
-    qs = np.quantile(shade[land], [0.10, 0.30, 0.60])
+    # value distribution quantiles are a pinned-per-experiment param —
+    # changing them mutated archived variants once (never again)
+    qs = np.quantile(shade[land], list(value_qs))
     ids = [int(i) for i in np.unique(labels) if i != 0]
     forms = []
     for i in ids:

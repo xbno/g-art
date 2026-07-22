@@ -226,18 +226,39 @@ function abstractView(a) {
 // ---------------- forms (forming & angles) ----------------
 function formsView(f) {
   if (!f.rows || !f.rows.length) return '<div class="note">not built</div>';
-  let h = `<div class="note">forming & angles (engine/formplan.py):
-    photo → FORM PLAN (watershed masses, Payne-edited; one committed
-    value level + one committed angle per form, neighbors forced ≥12°
-    apart) → patch-language render (calm sweeps L1, faceted L2-3,
-    slivers from dark forms + sky). Middle panel = the plan itself:
-    judge the FORMING before the ink.</div><div class="grid">`;
-  for (const r of f.rows)
+  let h = `<div class="note">forming & angles v2 (engine/formplan.py):
+    forms = K-MEANS POSTERIZE OF THE MARIGOLD NORMALS (no watershed —
+    that was v1, tossed). Angle = each form's fall line; value = relight
+    with sun fit to the photo. nforms_* variants polygonize (rounded);
+    raw_* variants stay pixel-true to the map. Left panel = marigold +
+    derived direction field. Experiments are append-only (history
+    links).</div><div class="grid">`;
+  for (const r of f.rows) {
+    const hist = (r.history || []).length > 1
+      ? ` · history: ` + r.history.map((p, i) =>
+          `<a href="${p}" target="_blank">v${i}</a>`).join(' ')
+      : '';
     h += `<div class="card" style="width:100%">${img(r.img)}
       <div class="t">${r.name}
       <a href="${r.svg}" style="float:right;font-weight:400" download>svg ↓</a></div>
-      <div class="s">${r.n_forms} forms · levels ${r.levels.join(',')}</div></div>`;
-  return h + `</div>`;
+      <div class="s">${r.n_forms} forms · levels ${r.levels.join(',')}${hist}</div></div>`;
+  }
+  h += `</div>`;
+  if (f.archive && f.archive.length) {
+    h += `<h2>full archive — append-only, nothing ever leaves</h2>
+      <div class="note">every version of every experiment ever shown,
+      content-hashed. This list survives renames, config changes, and my
+      mistakes.</div>`;
+    for (const g of f.archive) {
+      h += `<h2 style="border:none;margin-bottom:2px">${g.name}
+            (${g.versions.length})</h2><div class="grid">`;
+      for (let i = 0; i < g.versions.length; i++)
+        h += `<div class="card" style="width:640px">${img(g.versions[i])}
+              <div class="s">v${i}</div></div>`;
+      h += `</div>`;
+    }
+  }
+  return h;
 }
 
 // ---------------- marks ----------------

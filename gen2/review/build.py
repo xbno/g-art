@@ -924,6 +924,84 @@ def build_abstract() -> dict:
 
 
 # ---------------------------------------------------------------- forms ----
+def _raw_normal_sheet(photo: str, K: int = 10,
+                      value_qs=(0.10, 0.30, 0.60)):
+    """PIXEL-TRUE posterize render — zero geometry cleanup, so the
+    marigold's character (couloirs, jagged tree texture) survives.
+    Per class: exact fall-line angle; value level from relit shade
+    (paper-heavy); fine lines via 2x supersample."""
+    from engine.scene import load_normals, load_semantic, relight
+
+    pp = ROOT / photo
+    bgr = cv2.imread(str(pp))
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+    H, W = gray.shape
+    nrm = load_normals(str(pp), (H, W))
+    sem = load_semantic(str(pp), (H, W))
+    sky = np.isin(sem["labels"],
+                  [i for i, n in sem["names"].items()
+                   if "sky" in n.lower()])
+    land = ~sky
+    ns = cv2.GaussianBlur(nrm, (0, 0), 3)
+    feats = ns[land].reshape(-1, 3).astype(np.float32)
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-3)
+    cv2.setRNGSeed(7)  # global-rng kmeans — seed per call (purity)
+    _c, lab, ctr = cv2.kmeans(feats, K, None, crit, 4,
+                              cv2.KMEANS_PP_CENTERS)
+    cls = np.full((H, W), -1, np.int32)
+    cls[land] = lab.ravel()
+
+    best_az, best_c = 315.0, -2.0
+    gl = gray[land]
+    gl = (gl - gl.mean()) / (gl.std() + 1e-9)
+    for az in range(0, 360, 30):
+        sh = relight(nrm, float(az), 40.0)[land]
+        sh = (sh - sh.mean()) / (sh.std() + 1e-9)
+        c = float((sh * gl).mean())
+        if c > best_c:
+            best_az, best_c = float(az), c
+    shade = relight(nrm, best_az, 40.0)
+    qs = np.quantile(shade[land], list(value_qs))
+
+    S = 2  # supersample
+    out = np.full((H * S, W * S), 255, np.uint8)
+    diag = int(np.hypot(H, W)) * S
+    SP = {1: 15, 2: 10, 3: 6}  # spacing px at 2x, per level
+    for k in range(K):
+        mask = cls == k
+        if not mask.any():
+            continue
+        level = 3 - int(np.digitize(float(shade[mask].mean()), qs))
+        if level <= 0:
+            continue
+        n = ctr[k]
+        th = np.arctan2(n[1], n[0])
+        d = np.array([np.cos(th), np.sin(th)])
+        nv = np.array([-d[1], d[0]])
+        canvas = np.zeros((H * S, W * S), np.uint8)
+        c0 = np.array([W * S / 2, H * S / 2])
+        for off in range(-diag // 2, diag // 2, SP[level]):
+            p = c0 + nv * off
+            a = (p - d * diag).astype(int)
+            b = (p + d * diag).astype(int)
+            cv2.line(canvas, tuple(a), tuple(b), 255, 2, cv2.LINE_AA)
+        mbig = cv2.resize(mask.astype(np.uint8), (W * S, H * S),
+                          interpolation=cv2.INTER_NEAREST)
+        out[(canvas > 127) & (mbig > 0)] = 0
+    out = cv2.resize(out, (W, H), interpolation=cv2.INTER_AREA)
+    cviz = np.full((H, W, 3), 245, np.uint8)
+    for k in range(K):
+        col = cv2.cvtColor(np.uint8([[[int((k * 0.618 % 1) * 179),
+                                       150, 220]]]),
+                           cv2.COLOR_HSV2BGR)[0, 0]
+        cviz[cls == k] = col
+    nviz = cv2.cvtColor(((nrm + 1) / 2 * 255).astype(np.uint8),
+                        cv2.COLOR_RGB2BGR)
+    gap = np.full((H, 12, 3), 255, np.uint8)
+    return np.concatenate([nviz, gap, cviz, gap,
+                           cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)], 1)
+
+
 def build_forms() -> dict:
     """The forming & angles arc (engine/formplan.py): photo -> form plan
     (committed level + angle per mass) -> patch-language render. The
@@ -936,17 +1014,23 @@ def build_forms() -> dict:
     svg_dir = OUT / "svg"
     svg_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    CFGS = (  # (suffix, k, blur_mm, snap_deg, spacing_scale, raster_px)
-        ("k6b2", 6, 2.0, 15.0, 1.0, 900),
-        ("k8b1", 8, 1.2, 15.0, 1.0, 900),
-        ("slope_fine", 10, 1.2, 0.0, 0.65, 1500),
+    # every config is PINNED (incl. value quantiles) — shared-code
+    # changes must never mutate a variant the user kept as reference
+    CFGS = (  # (suffix, k, blur, snap, spacing_scale, raster_px, qs)
+        ("k6b2", 6, 2.0, 15.0, 1.0, 900, (0.45, 0.72, 0.9)),
+        ("k6b2_v2", 6, 2.0, 15.0, 1.0, 900, (0.10, 0.30, 0.60)),
+        ("k8b1_ref", 8, 1.2, 15.0, 1.0, 900, (0.45, 0.72, 0.9)),
+        ("slope_fine", 10, 1.2, 0.0, 0.65, 1500, (0.10, 0.30, 0.60)),
     )
-    for suffix, kk, blur, snap, spsc, rpx in CFGS:
+    arch = OUT / "experiments" / "forms"
+    arch.mkdir(parents=True, exist_ok=True)
+    for suffix, kk, blur, snap, spsc, rpx, qs in CFGS:
         photo = "tests/fixtures/peak_src.png"
         stem = f"{Path(photo).stem}_{suffix}"
         try:
             plan = build_normal_form_plan(str(ROOT / photo), k=kk,
-                                          blur_mm=blur, snap_deg=snap)
+                                          blur_mm=blur, snap_deg=snap,
+                                          value_qs=qs)
         except Exception as e:
             log.warning("forms: %s failed: %s", stem, e)
             continue
@@ -966,12 +1050,45 @@ def build_forms() -> dict:
         panel = np.concatenate([nv, gap, pv, gap, img], 1)
         name = f"nforms_{stem}"
         write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
+        # APPEND-ONLY archive: content-hashed copy of every panel ever
+        # shown; a shown experiment can never be silently mutated again
+        ok, buf = cv2.imencode(".png", panel)
+        hh = hashlib.sha1(buf.tobytes()).hexdigest()[:8]
+        apath = arch / f"{name}__{hh}.png"
+        if not apath.exists():
+            apath.write_bytes(buf.tobytes())
+            log.info("forms archive: + %s", apath.name)
+        history = sorted(p.name for p in arch.glob(f"{name}__*.png"))
         rows.append({
             "name": name, "svg": f"svg/{name}.svg",
             "n_forms": len(plan["forms"]),
             "levels": sorted({f["level"] for f in plan["forms"]}),
-            "img": _save(f"{name}.png", panel)})
-    return {"rows": rows}
+            "img": f"experiments/forms/{apath.name}",
+            "history": [f"experiments/forms/{h}" for h in history]})
+
+    # pixel-true raw posterize (no polygons — the map's character kept)
+    panel = _raw_normal_sheet("tests/fixtures/peak_src.png", K=10)
+    ok, buf = cv2.imencode(".png", panel)
+    hh = hashlib.sha1(buf.tobytes()).hexdigest()[:8]
+    apath = arch / f"nforms_peak_src_raw10__{hh}.png"
+    if not apath.exists():
+        apath.write_bytes(buf.tobytes())
+        log.info("forms archive: + %s", apath.name)
+    history = sorted(p.name for p in
+                     arch.glob("nforms_peak_src_raw10__*.png"))
+    rows.append({"name": "nforms_peak_src_raw10", "svg": "",
+                 "n_forms": 10, "levels": [0, 1, 2, 3],
+                 "img": f"experiments/forms/{apath.name}",
+                 "history": [f"experiments/forms/{h}" for h in history]})
+
+    # THE FULL ARCHIVE — every panel ever shown, grouped, regardless of
+    # what configs exist today. Nothing leaves this list, ever.
+    groups = {}
+    for p in sorted(arch.glob("*.png")):
+        base = p.name.rsplit("__", 1)[0]
+        groups.setdefault(base, []).append(f"experiments/forms/{p.name}")
+    archive = [{"name": k, "versions": v} for k, v in groups.items()]
+    return {"rows": rows, "archive": archive}
 
 
 # ---------------------------------------------------------------- bench ----
