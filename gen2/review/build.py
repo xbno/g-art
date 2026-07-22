@@ -657,12 +657,13 @@ def build_abstract() -> dict:
 
     # anisotropic patch fields — the reference cell geometry: patches
     # elongated along their own stroke direction, coherent drift
+    # NOTE (user, 2026-07-21): random per-cell spacing mix reads
+    # terrible — density must be MOTIVATED (form/shadow), not sprinkled.
+    # Uniform density is this style's baseline; mix mode stays off.
     for seed in (1, 2):
         emit(f"aniso_s{seed}", _aniso_sheet(seed, mix=False),
              190.0, 130.0, "cells stretched ALONG their hatch direction "
              "over a drifting field; emergent fold lines, no outlines")
-    emit("aniso_mix", _aniso_sheet(3, mix=True), 190.0, 130.0,
-         "same + sparse tonal variety: occasional bare and tight cells")
 
     # 7. no-outline drop — like the original prints: overlapping objects
     # separate purely by angle contrast, zero outlines
