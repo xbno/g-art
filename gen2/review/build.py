@@ -1253,6 +1253,41 @@ def build_forms() -> dict:
     return {"rows": rows, "archive": archive}
 
 
+# ------------------------------------------------------------ brainstorm ---
+def build_brainstorm() -> dict:
+    """The pre-UI exploration, surfaced: every bakeoff/showcase gallery
+    panel (they were never lost — only their star flags, which live in
+    the old pages' localStorage). Galleries are symlinked into the
+    served tree; stars light up once review/stars.json is imported."""
+    gals = []
+    for kind in ("bakeoff", "showcase"):
+        base = ROOT / "runs" / kind
+        if not base.exists():
+            continue
+        for mf in sorted(base.glob("*/manifest.json")):
+            stem = mf.parent.name
+            try:
+                d = json.loads(mf.read_text())
+            except Exception:
+                continue
+            panels = [{"id": p.get("id"), "family": p.get("family"),
+                       "title": p.get("title"),
+                       "img": f"{kind}/{stem}/{p.get('img')}"}
+                      for p in d.get("panels", [])]
+            gals.append({"kind": kind, "stem": stem,
+                         "key": f"{kind}/{stem}",
+                         "photo": f"{kind}/{stem}/{d.get('photo', '')}",
+                         "families": sorted({p["family"] for p in panels
+                                             if p["family"]}),
+                         "panels": panels})
+    stars = {}
+    sp = Path(__file__).parent / "stars.json"
+    if sp.exists():
+        raw = json.loads(sp.read_text())
+        stars = {k: [p.get("id") for p in v] for k, v in raw.items()}
+    return {"galleries": gals, "stars": stars}
+
+
 # ---------------------------------------------------------------- tuner ----
 def build_tuner() -> dict:
     """Interactive angle/value tuner: precompute posterize class maps at
@@ -1593,8 +1628,8 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("strokes", "bench", "abstract", "forms", "tuner", "marks",
-            "pipeline", "iterations", "starred")
+SECTIONS = ("strokes", "bench", "abstract", "forms", "tuner",
+            "brainstorm", "marks", "pipeline", "iterations", "starred")
 
 
 def build(sections=SECTIONS) -> Path:
@@ -1614,6 +1649,8 @@ def build(sections=SECTIONS) -> Path:
         man["sections"]["forms"] = build_forms()
     if "tuner" in sections:
         man["sections"]["tuner"] = build_tuner()
+    if "brainstorm" in sections:
+        man["sections"]["brainstorm"] = build_brainstorm()
     if "marks" in sections:
         man["sections"]["marks"] = build_marks()
     if "pipeline" in sections:

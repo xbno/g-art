@@ -96,6 +96,7 @@ const TABS = {
   abstract:   'abstract',
   forms:      'forms',
   tuner:      'tuner',
+  brainstorm: 'brainstorm',
   marks:      'marks',
   pipeline:   'pipeline',
   translation:'translation',
@@ -448,6 +449,50 @@ function tunerDraw() {
   }
 }
 
+// ---------------- brainstorm (pre-UI galleries) ----------------
+let BS = {gal: 0, fam: 'all', starOnly: false};
+function brainstormView(b) {
+  if (!b.galleries || !b.galleries.length)
+    return '<div class="note">no galleries found under runs/bakeoff|showcase</div>';
+  const g = b.galleries[BS.gal];
+  const starred = new Set(b.stars[g.key] || []);
+  let h = `<div class="note">the pre-UI exploration — every gallery
+    panel, intact. Star flags still live in the OLD pages' localStorage:
+    open <a href="http://localhost:8765">localhost:8765</a> and
+    <a href="http://localhost:8766">localhost:8766</a> once (auto-capture),
+    then tell claude to import — stars will light up here.</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <select id="bsGal">${b.galleries.map((x, i) =>
+      `<option value="${i}" ${i===BS.gal?'selected':''}>${x.key}
+       (${x.panels.length})</option>`).join('')}</select>
+    <select id="bsFam"><option>all</option>${g.families.map(f =>
+      `<option ${f===BS.fam?'selected':''}>${f}</option>`).join('')}</select>
+    <label><input type="checkbox" id="bsStar" ${BS.starOnly?'checked':''}>
+      starred only (${starred.size})</label>
+  </div><div class="grid">`;
+  let shown = 0;
+  for (const p of g.panels) {
+    if (BS.fam !== 'all' && p.family !== BS.fam) continue;
+    if (BS.starOnly && !starred.has(p.id)) continue;
+    if (++shown > 400) { h += `<div class="note">…truncated at 400 —
+      filter by family</div>`; break; }
+    h += `<div class="card">${img(p.img)}
+      <div class="s">${starred.has(p.id) ? '★ ' : ''}[${p.family}]
+      ${esc(p.title || '')}</div></div>`;
+  }
+  h += `</div>`;
+  setTimeout(() => {
+    const S = MAN.sections.brainstorm;
+    document.getElementById('bsGal').onchange = e => {
+      BS.gal = +e.target.value; BS.fam = 'all'; render(); };
+    document.getElementById('bsFam').onchange = e => {
+      BS.fam = e.target.value; render(); };
+    document.getElementById('bsStar').onchange = e => {
+      BS.starOnly = e.target.checked; render(); };
+  }, 0);
+  return h;
+}
+
 // ---------------- marks ----------------
 function marksView(m) {
   let h = `<h2>value scale — every mark, sorted light → dark</h2>
@@ -623,6 +668,7 @@ function render() {
     else if (TAB === 'abstract') m.innerHTML = S.abstract ? abstractView(S.abstract) : 'not built';
     else if (TAB === 'forms') m.innerHTML = S.forms ? formsView(S.forms) : 'not built';
     else if (TAB === 'tuner') m.innerHTML = S.tuner ? tunerView(S.tuner) : 'not built';
+    else if (TAB === 'brainstorm') m.innerHTML = S.brainstorm ? brainstormView(S.brainstorm) : 'not built';
     else if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
