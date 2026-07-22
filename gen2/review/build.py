@@ -455,7 +455,7 @@ def build_pair_from(genome: dict, name: str, photo: str, seed: int,
 
 
 # ------------------------------------------------------------- abstract ----
-def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0):
+def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0, outline=True):
     """Polygonal tiling, every cell a random committed angle, honoring
     the invariant the ghost-square bug taught: ADJACENT CELLS NEVER
     SHARE AN ANGLE (same angle + shifted phase = fake seam)."""
@@ -470,12 +470,13 @@ def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0):
         banned = {angle[j] for j in neighbors[i] if angle[j] is not None}
         pool = [a for a in ANGLES if a not in banned]
         angle[i] = float(pool[int(rng.integers(len(pool)))])
-    hatch, outline = [], []
+    hatch, rings = [], []
     for i, cell in enumerate(cells):
         hatch += fixed_hatch(cell, angle[i], 1.15, rng,
                              spacing_jitter=0.04)
-        outline += region_outline(cell)
-    return {"black03": hatch + outline}
+        if outline:
+            rings += region_outline(cell)
+    return {"black03": hatch + rings}
 
 
 def _mesh_sheet(photo: str, seed: int, outline: bool,
@@ -618,6 +619,10 @@ def build_abstract() -> dict:
         emit(f"grid_s{seed}", _grid_sheet(seed), 190.0, 130.0,
              "gapless jittered tiling + merges; adjacent cells never "
              "share an angle")
+    for seed in (1, 2):
+        emit(f"grid_noline_s{seed}", _grid_sheet(seed, outline=False),
+             190.0, 130.0, "the same tiling, NO outlines — cells "
+             "separate by angle contrast alone")
 
     # 7. no-outline drop — like the original prints: overlapping objects
     # separate purely by angle contrast, zero outlines
