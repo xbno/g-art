@@ -454,6 +454,90 @@ def build_pair_from(genome: dict, name: str, photo: str, seed: int,
     return data
 
 
+# ------------------------------------------------------------- abstract ----
+def _abstract_sheet(mode: str, seed: int, w_mm=190.0, h_mm=130.0):
+    """gen1 hatch_hatch reborn (engine/regions.py). Modes:
+    gen1   — circles/squares/triangles, 5 materials, material-union
+             continuous hatching, composite bold outline (the plotted
+             2025-02 piece, faithfully)
+    facets — irregular 4-7-gons, EVERY effective region its own committed
+             angle, thin per-region outline (the rockface abstraction)
+    mixed  — both primitives, material hatching + facet angles fighting
+    """
+    from engine.hatch import fixed_hatch
+    from engine.regions import (composite_outline, effective_regions,
+                                make_shape, material_union, region_outline)
+
+    rng = np.random.default_rng(seed)
+    pad, cell = 12.0, 17.0
+    cols = int((w_mm - 2 * pad) / cell)
+    rows = int((h_mm - 2 * pad) / cell)
+    kinds_by_mode = {
+        "gen1": ["circle", "square", "triangle"],
+        "facets": ["poly", "poly", "poly", "poly", "circle"],
+        "mixed": ["poly", "poly", "circle", "square", "triangle"]}
+    polys, mats = [], []
+    for r in range(rows):
+        for c in range(cols):
+            if rng.uniform() < 0.34:
+                continue
+            x = pad + (c + 0.5) * cell + rng.uniform(-4, 4)
+            y = pad + (r + 0.5) * cell + rng.uniform(-4, 4)
+            mult = rng.choice([1, 1, 1, 1, 2, 2, 2, 2, 3, 3])
+            size = cell * 1.05 * mult
+            kind = rng.choice(kinds_by_mode[mode])
+            polys.append(make_shape(kind, (x, y), size, rng))
+            mats.append(len(polys) % 5)
+    eff = effective_regions(polys)
+
+    ANGLES = [-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90]
+    spacing = 1.15
+    hatch = []
+    if mode == "gen1":
+        # like the plotted piece: every material a single committed
+        # angle at ONE shared fine spacing; one rare cross-hatch material
+        specs = {m: [ANGLES[int(rng.integers(len(ANGLES)))]]
+                 for m in range(5)}
+        specs[4] = [specs[4][0], specs[4][0] + 90]
+        for m, region in material_union(eff, mats).items():
+            for i, ang in enumerate(specs[m]):
+                hatch += fixed_hatch(region, ang,
+                                     spacing * (1.7 if i else 1.0), rng,
+                                     spacing_jitter=0.04)
+        outline = composite_outline(polys)
+        return {"black03": hatch, "black05": outline}
+    for reg in eff:
+        if reg is None or reg.is_empty:
+            continue
+        ang = float(ANGLES[int(rng.integers(len(ANGLES)))])
+        hatch += fixed_hatch(reg, ang, spacing, rng, spacing_jitter=0.04)
+    outline = []
+    for reg in eff:
+        if reg is not None and not reg.is_empty:
+            outline += region_outline(reg)
+    layers = {"black03": hatch + outline}
+    if mode == "mixed":
+        layers["black05"] = composite_outline(polys)
+    return layers
+
+
+def build_abstract() -> dict:
+    """The L2 gate testbed: abstract sheets from the reborn gen1 stack —
+    vocabulary expressivity judged naked, no photo, no scene."""
+    from engine.page import Page
+    page = Page(190.0, 130.0, 0.0, 190.0 / 1300, 0.0, 0.0)
+    sheets = []
+    for mode in ("gen1", "facets", "mixed"):
+        for seed in (1, 2):
+            layers = _abstract_sheet(mode, seed)
+            img = _raster(layers, page, 1300)
+            n = sum(len(v) for v in layers.values())
+            sheets.append({"mode": mode, "seed": seed, "paths": n,
+                           "img": _save(f"abstract_{mode}_s{seed}.png",
+                                        img)})
+    return {"sheets": sheets}
+
+
 # ---------------------------------------------------------------- bench ----
 def build_bench() -> dict:
     """The re-ink bench (bench/): per reference crop — measurement,
@@ -735,8 +819,8 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("strokes", "bench", "marks", "pipeline", "iterations",
-            "starred")
+SECTIONS = ("strokes", "bench", "abstract", "marks", "pipeline",
+            "iterations", "starred")
 
 
 def build(sections=SECTIONS) -> Path:
@@ -750,6 +834,8 @@ def build(sections=SECTIONS) -> Path:
         man["sections"]["strokes"] = build_strokes()
     if "bench" in sections:
         man["sections"]["bench"] = build_bench()
+    if "abstract" in sections:
+        man["sections"]["abstract"] = build_abstract()
     if "marks" in sections:
         man["sections"]["marks"] = build_marks()
     if "pipeline" in sections:

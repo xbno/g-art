@@ -93,6 +93,7 @@ const pj = (o) => esc(JSON.stringify(o).replace(/[{}"]/g,'').replace(/,/g,'  '))
 const TABS = {
   strokes:    'strokes',
   bench:      'bench',
+  abstract:   'abstract',
   marks:      'marks',
   pipeline:   'pipeline',
   translation:'translation',
@@ -201,6 +202,23 @@ function patchesView(p) {
       <div class="card" style="width:100%">${img(p.combs.img)}</div>`;
   }
   return h;
+}
+
+// ---------------- abstract (L2 testbed) ----------------
+function abstractView(a) {
+  if (!a.sheets || !a.sheets.length) return '<div class="note">not built</div>';
+  let h = `<div class="note">the gen1 hatch_hatch architecture reborn
+    (engine/regions.py): overlapping shapes, z-occlusion, material-union
+    continuous hatching, composite outline — plus the rockface primitive:
+    irregular 4-7-gons with one committed angle per facet.
+    <b>gen1</b> = faithful to the plotted 2025-02 piece ·
+    <b>facets</b> = polygonal, per-region angles ·
+    <b>mixed</b> = both. Click to zoom.</div><div class="grid">`;
+  for (const s of a.sheets)
+    h += `<div class="card" style="width:640px">${img(s.img)}
+          <div class="t">${s.mode} · seed ${s.seed}</div>
+          <div class="s">${s.paths} paths</div></div>`;
+  return h + `</div>`;
 }
 
 // ---------------- marks ----------------
@@ -375,6 +393,7 @@ function render() {
   try {
     if (TAB === 'strokes') m.innerHTML = S.strokes ? strokesView(S.strokes) : 'not built';
     else if (TAB === 'bench') m.innerHTML = S.bench ? benchView(S.bench) : 'not built';
+    else if (TAB === 'abstract') m.innerHTML = S.abstract ? abstractView(S.abstract) : 'not built';
     else if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
