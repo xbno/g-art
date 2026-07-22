@@ -26,6 +26,29 @@ class _NoCache(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def do_POST(self):
+        if self.path != "/api/tuner":
+            self.send_response(404)
+            self.end_headers()
+            return
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        try:
+            data = json.loads(body)
+        except Exception:
+            self.send_response(400)
+            self.end_headers()
+            return
+        saves = OUT / "tuner_saves"
+        saves.mkdir(parents=True, exist_ok=True)
+        idx = len(list(saves.glob("tuner_*.json"))) + 1
+        p = saves / f"tuner_{idx:03d}.json"
+        p.write_text(json.dumps(data, indent=1))
+        print(f"tuner save -> {p}")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
     def log_message(self, fmt, *args):
         pass
 

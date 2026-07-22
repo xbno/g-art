@@ -1182,6 +1182,65 @@ def build_forms() -> dict:
     return {"rows": rows, "archive": archive}
 
 
+# ---------------------------------------------------------------- tuner ----
+def build_tuner() -> dict:
+    """Interactive angle/value tuner: precompute posterize class maps at
+    several K plus per-class stats; the browser hatches on a canvas in
+    real time — click a mass, nudge its angle, slide brightness/contrast
+    and posterize depth. Saves POST back to the server so the user's
+    tweaks become my spec."""
+    from engine.scene import load_normals, load_semantic, relight
+
+    photo = ROOT / "tests/fixtures/peak_src.png"
+    bgr = cv2.imread(str(photo))
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+    H, W = gray.shape
+    nrm = load_normals(str(photo), (H, W))
+    sem = load_semantic(str(photo), (H, W))
+    sky = np.isin(sem["labels"],
+                  [i for i, n in sem["names"].items()
+                   if "sky" in n.lower()])
+    land = ~sky
+    best_az, best_c = 315.0, -2.0
+    gl = (gray[land] - gray[land].mean()) / (gray[land].std() + 1e-9)
+    for az in range(0, 360, 30):
+        sh = relight(nrm, float(az), 40.0)[land]
+        sh = (sh - sh.mean()) / (sh.std() + 1e-9)
+        c = float((sh * gl).mean())
+        if c > best_c:
+            best_az, best_c = float(az), c
+    shade = relight(nrm, best_az, 40.0)
+    qs = [round(float(q), 4) for q in
+          np.quantile(shade[land], [0.10, 0.30, 0.60])]
+
+    ns = cv2.GaussianBlur(nrm, (0, 0), 3)
+    feats = ns[land].reshape(-1, 3).astype(np.float32)
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-3)
+    variants = {}
+    for K in (6, 8, 10, 12, 14):
+        cv2.setRNGSeed(7)
+        _c2, lab, ctr = cv2.kmeans(feats, K, None, crit, 4,
+                                   cv2.KMEANS_PP_CENTERS)
+        cls = np.full((H, W), 255, np.uint8)
+        cls[land] = lab.ravel().astype(np.uint8)
+        cv2.imwrite(str(IMG / f"tuner_cls_k{K}.png"), cls)
+        classes = []
+        for k in range(K):
+            m = cls == k
+            n = ctr[k]
+            ang = float(np.degrees(np.arctan2(n[1], n[0]))) % 180
+            classes.append({
+                "angle": round(ang, 1),
+                "shade": round(float(shade[m].mean()) if m.any()
+                               else 1.0, 4),
+                "area": round(float(m.mean()), 4)})
+        variants[K] = {"map": f"imgs/tuner_cls_k{K}.png",
+                       "classes": classes}
+    cv2.imwrite(str(IMG / "tuner_photo.png"), bgr)
+    return {"photo": "imgs/tuner_photo.png", "w": W, "h": H,
+            "sun_az": best_az, "qs": qs, "variants": variants}
+
+
 # ---------------------------------------------------------------- bench ----
 def build_bench() -> dict:
     """The re-ink bench (bench/): per reference crop — measurement,
@@ -1463,7 +1522,7 @@ def build_iterations() -> dict:
 
 
 # ----------------------------------------------------------------- main ----
-SECTIONS = ("strokes", "bench", "abstract", "forms", "marks",
+SECTIONS = ("strokes", "bench", "abstract", "forms", "tuner", "marks",
             "pipeline", "iterations", "starred")
 
 
@@ -1482,6 +1541,8 @@ def build(sections=SECTIONS) -> Path:
         man["sections"]["abstract"] = build_abstract()
     if "forms" in sections:
         man["sections"]["forms"] = build_forms()
+    if "tuner" in sections:
+        man["sections"]["tuner"] = build_tuner()
     if "marks" in sections:
         man["sections"]["marks"] = build_marks()
     if "pipeline" in sections:
