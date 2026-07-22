@@ -681,6 +681,135 @@ def _mesh_sheet(photo: str, seed: int, outline: bool,
     return layers, bgr
 
 
+def _mesh_objects_sheet(photo: str, seed: int, w_mm=130.0, h_mm=190.0):
+    """mesh_peak with the FULL grammar: objects from the frozen scene
+    plan (depth-ordered SAM regions, silhouettes simplified to committed
+    polygons), sky as a ruled field that YIELDS a sliver around the
+    land (the reference edge), per-object aniso fills clipped at form
+    boundaries, per-cell angle from normals, tone-motivated density
+    (bare lights / tight darks)."""
+    import shapely
+    from shapely.geometry import Polygon, box
+
+    from engine.hatch import fixed_hatch
+    from engine.regions import aniso_mesh, object_scene
+    from engine.scene import (load_normals, load_scene, load_semantic,
+                              normals_field)
+
+    rng = np.random.default_rng(seed)
+    pp = ROOT / photo
+    bgr = cv2.imread(str(pp))
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
+    H, W = gray.shape
+    s = max(W / (w_mm - 16), H / (h_mm - 16))  # px per mm
+
+    def to_px(xy):
+        return (np.clip((xy[..., 0] - 8) * s, 0, W - 1),
+                np.clip((xy[..., 1] - 8) * s, 0, H - 1))
+
+    nrm = load_normals(str(pp), gray.shape)
+    theta, _c, _v = normals_field(nrm, 1 / s, smooth_mm=6.0)
+    sem = load_semantic(str(pp), gray.shape)
+    sky_ids = [i for i, n in sem["names"].items() if "sky" in n.lower()]
+    sky_mask = np.isin(sem["labels"], sky_ids)
+    scene = load_scene(str(pp), gray.shape)
+
+    page_box = box(8, 8, w_mm - 8, h_mm - 8)
+
+    def mask_to_poly(mask, eps_mm=1.1):
+        m = cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8))
+        cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL,
+                                 cv2.CHAIN_APPROX_SIMPLE)
+        parts = []
+        for c in cs:
+            if cv2.contourArea(c) < (2.5 * s) ** 2:
+                continue
+            ap = cv2.approxPolyDP(c, eps_mm * s, True)[:, 0, :]
+            if len(ap) < 3:
+                continue
+            p = Polygon(ap / s + 8)
+            if not p.is_valid:
+                p = p.buffer(0)
+            parts.append(p)
+        if not parts:
+            return None
+        from shapely.ops import unary_union
+        return unary_union(parts).intersection(page_box)
+
+    # objects: sky first (farthest), then scene regions far -> near
+    regs = sorted(scene["regions"], key=lambda r: r["depth_rank"])
+    objs, auras, kinds = [], [], []
+    skyp = mask_to_poly(sky_mask)
+    if skyp is not None:
+        objs.append(skyp)
+        auras.append(0.0)
+        kinds.append("sky")
+    for r in regs:
+        if r["area_frac"] < 0.02:
+            continue
+        mask = (scene["labels"] == r["id"]) & ~sky_mask
+        if mask.mean() < 0.01:
+            continue
+        p = mask_to_poly(mask)
+        if p is None or p.is_empty:
+            continue
+        objs.append(p)
+        auras.append(1.2)
+        kinds.append("land")
+    pairs = object_scene(objs, auras)
+
+    hatch = []
+    for i, (fill, _vis) in enumerate(pairs):
+        if fill.is_empty:
+            continue
+        if kinds[i] == "sky":
+            hatch += fixed_hatch(fill, 2.0, 1.15, rng,
+                                 spacing_jitter=0.05)
+            continue
+        cells, neighbors, _th = aniso_mesh(
+            w_mm, h_mm, rng,
+            n_parents=int(np.clip(fill.area / 130, 14, 110)))
+        angle = [None] * len(cells)
+        covered = None
+        for ci, cell in enumerate(cells):
+            if cell is None:
+                continue
+            cc = cell.intersection(fill)
+            if cc.is_empty:
+                continue
+            minx, miny, maxx, maxy = cc.bounds
+            xs = rng.uniform(minx, maxx, 20)
+            ys = rng.uniform(miny, maxy, 20)
+            ins = shapely.contains_xy(cc, xs, ys)
+            if not ins.any():
+                continue
+            px, py = to_px(np.stack([xs[ins], ys[ins]], 1))
+            g = float(gray[py.astype(int), px.astype(int)].mean())
+            t2 = 2 * theta[py.astype(int), px.astype(int)]
+            ang = float(np.degrees(0.5 * np.arctan2(
+                np.sin(t2).mean(), np.cos(t2).mean())))
+            ang = round(ang / 15) * 15.0
+            for j in neighbors[ci]:
+                if angle[j] is not None and \
+                        abs(((ang - angle[j] + 90) % 180) - 90) < 10:
+                    ang += float(rng.choice([-1, 1])) * 15.0
+                    break
+            angle[ci] = ang
+            if g > 0.80:
+                covered = cc if covered is None else covered.union(cc)
+                continue  # lit snow stays paper
+            sp = 0.8 if g < 0.38 else 1.15
+            hatch += fixed_hatch(cc, ang, sp, rng, spacing_jitter=0.05)
+            covered = cc if covered is None else covered.union(cc)
+        rest = fill if covered is None else fill.difference(covered)
+        rest = rest.buffer(-0.55).buffer(0.5)
+        for part in getattr(rest, "geoms", [rest]):
+            if not part.is_empty and part.area > 3.0:
+                hatch += fixed_hatch(part, 45.0, 1.15, rng,
+                                     spacing_jitter=0.05)
+    return {"black03": hatch}, bgr
+
+
 def build_abstract() -> dict:
     """The faithful-migration test suite (engine/gen1.py + regions.py):
     prove gen1's full capability in gen2 before building past it."""
@@ -763,12 +892,17 @@ def build_abstract() -> dict:
     emit("drop_noline", lay, 190.0, 130.0,
          "no outline anywhere — separation by angle contrast alone")
 
-    # 8-9. MESHIFY: image -> adaptive polygonal mesh -> shaded by the
-    # surface (angle from normals fall-line, spacing from tone)
-    for outline in (False, True):
-        name = f"mesh_peak_{'lines' if outline else 'clean'}"
-        layers, photo_bgr = _mesh_sheet("tests/fixtures/peak_src.png",
-                                        7, outline)
+    # 8-10. MESHIFY: image -> adaptive polygonal mesh -> shaded by the
+    # surface; the _objects variant adds the full grammar (scene-plan
+    # objects, sky sliver, form-clipped fills)
+    variants = [("mesh_peak_clean", lambda: _mesh_sheet(
+        "tests/fixtures/peak_src.png", 7, False)),
+        ("mesh_peak_lines", lambda: _mesh_sheet(
+            "tests/fixtures/peak_src.png", 7, True)),
+        ("mesh_peak_objects", lambda: _mesh_objects_sheet(
+            "tests/fixtures/peak_src.png", 7))]
+    for name, fn in variants:
+        layers, photo_bgr = fn()
         page = Page(130.0, 190.0, 0.0, 130.0 / 900, 0.0, 0.0)
         img = _raster(layers, page, 900)
         ph = cv2.resize(photo_bgr,
@@ -777,11 +911,12 @@ def build_abstract() -> dict:
         gapc = np.full((img.shape[0], 10, 3), 255, np.uint8)
         panel = np.concatenate([ph, gapc, img], 1)
         write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
-        sheets.append({"name": name,
-                       "note": "meshify: Voronoi cells dense where "
-                       "detail lives; angle = normals fall-line, "
-                       "spacing = tone, lightest cells bare"
-                       + ("" if outline else " · NO outlines"),
+        note = ("full grammar: scene-plan objects in depth order, ruled "
+                "sky yielding a sliver, form-clipped aniso fills"
+                if name.endswith("objects") else
+                "meshify: Voronoi cells dense where detail lives; angle "
+                "= normals fall-line, spacing = tone, lightest bare")
+        sheets.append({"name": name, "note": note,
                        "paths": sum(len(v) for v in layers.values()),
                        "svg": f"svg/{name}.svg",
                        "img": _save(f"abstract_{name}.png", panel)})
