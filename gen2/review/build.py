@@ -455,86 +455,78 @@ def build_pair_from(genome: dict, name: str, photo: str, seed: int,
 
 
 # ------------------------------------------------------------- abstract ----
-def _abstract_sheet(mode: str, seed: int, w_mm=190.0, h_mm=130.0):
-    """gen1 hatch_hatch reborn (engine/regions.py). Modes:
-    gen1   — circles/squares/triangles, 5 materials, material-union
-             continuous hatching, composite bold outline (the plotted
-             2025-02 piece, faithfully)
-    facets — irregular 4-7-gons, EVERY effective region its own committed
-             angle, thin per-region outline (the rockface abstraction)
-    mixed  — both primitives, material hatching + facet angles fighting
-    """
+def _grid_sheet(seed: int, w_mm=190.0, h_mm=130.0):
+    """Polygonal tiling, every cell a random committed angle, honoring
+    the invariant the ghost-square bug taught: ADJACENT CELLS NEVER
+    SHARE AN ANGLE (same angle + shifted phase = fake seam)."""
     from engine.hatch import fixed_hatch
-    from engine.regions import (composite_outline, effective_regions,
-                                make_shape, material_union, region_outline)
+    from engine.regions import poly_grid, region_outline
 
     rng = np.random.default_rng(seed)
-    pad, cell = 12.0, 17.0
-    cols = int((w_mm - 2 * pad) / cell)
-    rows = int((h_mm - 2 * pad) / cell)
-    kinds_by_mode = {
-        "gen1": ["circle", "square", "triangle"],
-        "facets": ["poly", "poly", "poly", "poly", "circle"],
-        "mixed": ["poly", "poly", "circle", "square", "triangle"]}
-    polys, mats = [], []
-    for r in range(rows):
-        for c in range(cols):
-            if rng.uniform() < 0.34:
-                continue
-            x = pad + (c + 0.5) * cell + rng.uniform(-4, 4)
-            y = pad + (r + 0.5) * cell + rng.uniform(-4, 4)
-            mult = rng.choice([1, 1, 1, 1, 2, 2, 2, 2, 3, 3])
-            size = cell * 1.05 * mult
-            kind = rng.choice(kinds_by_mode[mode])
-            polys.append(make_shape(kind, (x, y), size, rng))
-            mats.append(len(polys) % 5)
-    eff = effective_regions(polys)
-
+    cells, neighbors = poly_grid(w_mm, h_mm, rng)
     ANGLES = [-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90]
-    spacing = 1.15
-    hatch = []
-    if mode == "gen1":
-        # like the plotted piece: every material a single committed
-        # angle at ONE shared fine spacing; one rare cross-hatch material
-        specs = {m: [ANGLES[int(rng.integers(len(ANGLES)))]]
-                 for m in range(5)}
-        specs[4] = [specs[4][0], specs[4][0] + 90]
-        for m, region in material_union(eff, mats).items():
-            for i, ang in enumerate(specs[m]):
-                hatch += fixed_hatch(region, ang,
-                                     spacing * (1.7 if i else 1.0), rng,
-                                     spacing_jitter=0.04)
-        outline = composite_outline(polys)
-        return {"black03": hatch, "black05": outline}
-    for reg in eff:
-        if reg is None or reg.is_empty:
-            continue
-        ang = float(ANGLES[int(rng.integers(len(ANGLES)))])
-        hatch += fixed_hatch(reg, ang, spacing, rng, spacing_jitter=0.04)
-    outline = []
-    for reg in eff:
-        if reg is not None and not reg.is_empty:
-            outline += region_outline(reg)
-    layers = {"black03": hatch + outline}
-    if mode == "mixed":
-        layers["black05"] = composite_outline(polys)
-    return layers
+    angle = [None] * len(cells)
+    for i in range(len(cells)):
+        banned = {angle[j] for j in neighbors[i] if angle[j] is not None}
+        pool = [a for a in ANGLES if a not in banned]
+        angle[i] = float(pool[int(rng.integers(len(pool)))])
+    hatch, outline = [], []
+    for i, cell in enumerate(cells):
+        hatch += fixed_hatch(cell, angle[i], 1.15, rng,
+                             spacing_jitter=0.04)
+        outline += region_outline(cell)
+    return {"black03": hatch + outline}
 
 
 def build_abstract() -> dict:
-    """The L2 gate testbed: abstract sheets from the reborn gen1 stack —
-    vocabulary expressivity judged naked, no photo, no scene."""
+    """The faithful-migration test suite (engine/gen1.py + regions.py):
+    prove gen1's full capability in gen2 before building past it."""
+    from engine.gen1 import drop_shapes, fixed_scenario, scene_layers
     from engine.page import Page
-    page = Page(190.0, 130.0, 0.0, 190.0 / 1300, 0.0, 0.0)
+    from engine.svgout import write_svg
+
+    svg_dir = OUT / "svg"
+    svg_dir.mkdir(parents=True, exist_ok=True)
     sheets = []
-    for mode in ("gen1", "facets", "mixed"):
-        for seed in (1, 2):
-            layers = _abstract_sheet(mode, seed)
-            img = _raster(layers, page, 1300)
-            n = sum(len(v) for v in layers.values())
-            sheets.append({"mode": mode, "seed": seed, "paths": n,
-                           "img": _save(f"abstract_{mode}_s{seed}.png",
-                                        img)})
+
+    def emit(name, layers, w_mm, h_mm, note):
+        page = Page(w_mm, h_mm, 0.0, w_mm / 1300, 0.0, 0.0)
+        img = _raster(layers, page, 1300)
+        write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
+        sheets.append({"name": name, "note": note,
+                       "paths": sum(len(v) for v in layers.values()),
+                       "svg": f"svg/{name}.svg",
+                       "img": _save(f"abstract_{name}.png", img)})
+
+    # 1. fixed scenario — the original's own regression test, ported
+    polys, mats = fixed_scenario()
+    emit("fixed_scenario", scene_layers(polys, mats,
+                                        np.random.default_rng(0)),
+         115.0, 162.0, "gen1 create_fixed_shape_scenario verbatim — "
+         "incl. same-material overlaps hatching continuously")
+
+    # 2-3. random drop, original primitives — five materials, five
+    # distinct committed angles, one spacing, bold union outline
+    for seed in (1, 2):
+        rng = np.random.default_rng(seed)
+        polys, mats = drop_shapes(190.0, 130.0, rng)
+        emit(f"drop_s{seed}", scene_layers(polys, mats, rng),
+             190.0, 130.0, "gen1 random mode faithful: grid drop, "
+             "size multipliers, materials 0-4 = distinct single angles")
+
+    # 4. drop with polygons joining the primitive set
+    rng = np.random.default_rng(3)
+    polys, mats = drop_shapes(
+        190.0, 130.0, rng,
+        kinds=("circle", "square", "triangle", "poly", "poly"))
+    emit("drop_poly", scene_layers(polys, mats, rng),
+         190.0, 130.0, "same machinery, irregular 4-7-gons added")
+
+    # 5-6. polygon grid, per-cell random angles, no-neighbor-repeat
+    for seed in (1, 2):
+        emit(f"grid_s{seed}", _grid_sheet(seed), 190.0, 130.0,
+             "gapless jittered tiling + merges; adjacent cells never "
+             "share an angle")
     return {"sheets": sheets}
 
 

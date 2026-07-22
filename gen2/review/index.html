@@ -207,17 +207,18 @@ function patchesView(p) {
 // ---------------- abstract (L2 testbed) ----------------
 function abstractView(a) {
   if (!a.sheets || !a.sheets.length) return '<div class="note">not built</div>';
-  let h = `<div class="note">the gen1 hatch_hatch architecture reborn
-    (engine/regions.py): overlapping shapes, z-occlusion, material-union
-    continuous hatching, composite outline — plus the rockface primitive:
-    irregular 4-7-gons with one committed angle per facet.
-    <b>gen1</b> = faithful to the plotted 2025-02 piece ·
-    <b>facets</b> = polygonal, per-region angles ·
-    <b>mixed</b> = both. Click to zoom.</div><div class="grid">`;
+  let h = `<div class="note">the faithful gen1 migration test suite
+    (engine/gen1.py: verbatim pattern table + styles, grid drop,
+    material unions, bold composite outline; engine/regions.py:
+    z-occlusion, polygons, tilings). Every sheet has a plotter-ready
+    SVG. Invariant enforced after the ghost-square bug: adjacent fields
+    never share an angle.</div><div class="grid">`;
   for (const s of a.sheets)
     h += `<div class="card" style="width:640px">${img(s.img)}
-          <div class="t">${s.mode} · seed ${s.seed}</div>
-          <div class="s">${s.paths} paths</div></div>`;
+          <div class="t">${s.name}
+          <a href="${s.svg}" style="float:right;font-weight:400"
+             download>svg ↓</a></div>
+          <div class="s">${esc(s.note)} · ${s.paths} paths</div></div>`;
   return h + `</div>`;
 }
 
