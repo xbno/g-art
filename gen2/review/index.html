@@ -94,6 +94,7 @@ const TABS = {
   strokes:    'strokes',
   bench:      'bench',
   abstract:   'abstract',
+  forms:      'forms',
   marks:      'marks',
   pipeline:   'pipeline',
   translation:'translation',
@@ -219,6 +220,23 @@ function abstractView(a) {
           <a href="${s.svg}" style="float:right;font-weight:400"
              download>svg ↓</a></div>
           <div class="s">${esc(s.note)} · ${s.paths} paths</div></div>`;
+  return h + `</div>`;
+}
+
+// ---------------- forms (forming & angles) ----------------
+function formsView(f) {
+  if (!f.rows || !f.rows.length) return '<div class="note">not built</div>';
+  let h = `<div class="note">forming & angles (engine/formplan.py):
+    photo → FORM PLAN (watershed masses, Payne-edited; one committed
+    value level + one committed angle per form, neighbors forced ≥12°
+    apart) → patch-language render (calm sweeps L1, faceted L2-3,
+    slivers from dark forms + sky). Middle panel = the plan itself:
+    judge the FORMING before the ink.</div><div class="grid">`;
+  for (const r of f.rows)
+    h += `<div class="card" style="width:100%">${img(r.img)}
+      <div class="t">${r.name}
+      <a href="${r.svg}" style="float:right;font-weight:400" download>svg ↓</a></div>
+      <div class="s">${r.n_forms} forms · levels ${r.levels.join(',')}</div></div>`;
   return h + `</div>`;
 }
 
@@ -395,6 +413,7 @@ function render() {
     if (TAB === 'strokes') m.innerHTML = S.strokes ? strokesView(S.strokes) : 'not built';
     else if (TAB === 'bench') m.innerHTML = S.bench ? benchView(S.bench) : 'not built';
     else if (TAB === 'abstract') m.innerHTML = S.abstract ? abstractView(S.abstract) : 'not built';
+    else if (TAB === 'forms') m.innerHTML = S.forms ? formsView(S.forms) : 'not built';
     else if (TAB === 'marks') m.innerHTML = S.marks ? marksView(S.marks) : 'not built';
     else if (TAB === 'pipeline') m.innerHTML = pipelineView(S.pipeline || []);
     else if (TAB === 'translation') m.innerHTML = translationView(S.pipeline || []);
