@@ -528,8 +528,10 @@ def _objects_sheet(seed: int, w_mm=190.0, h_mm=130.0):
     rng = np.random.default_rng(seed)
     objs = [box(8, 8, w_mm - 8, h_mm - 8)]   # background sky
     genes = [("none", 0.0)]
+    # objects ALWAYS separate (user: bare butting reads as a bug at the
+    # object level — that register belongs to interior patches only)
     GENES = [("sliver", 1.4), ("sliver", 1.4), ("outline", 0.0),
-             ("sliver+outline", 1.4), ("none", 0.0), ("sliver", 1.4)]
+             ("sliver+outline", 1.4), ("sliver", 1.4), ("outline", 0.0)]
     page_box = box(8, 8, w_mm - 8, h_mm - 8)
     for gi in range(6):
         c = (rng.uniform(30, w_mm - 30), rng.uniform(28, h_mm - 28))
@@ -567,14 +569,19 @@ def _objects_sheet(seed: int, w_mm=190.0, h_mm=130.0):
             hatch += fixed_hatch(cc, ang, 1.15, rng, spacing_jitter=0.05)
             covered = cc if covered is None \
                 else covered.union(cc)
-        # catch-all: mesh cells lost to clipping leave bare holes —
-        # hatch the remainder at the object's bias angle
+        # catch-all: mesh cells lost to clipping leave bare holes.
+        # ERODE first — hairline slivers between cells otherwise hatch
+        # into errant single strokes (user-spotted bug)
         rest = fill if covered is None else fill.difference(covered)
-        if not rest.is_empty and rest.area > 4.0:
-            hatch += fixed_hatch(rest, round(bias / 15) * 15.0, 1.15,
-                                 rng, spacing_jitter=0.05)
-        if "outline" in genes[i][0] and not visible.is_empty:
-            for ring in region_outline(visible):
+        rest = rest.buffer(-0.55).buffer(0.5)
+        for part in getattr(rest, "geoms", [rest]):
+            if not part.is_empty and part.area > 3.0:
+                hatch += fixed_hatch(part, round(bias / 15) * 15.0, 1.15,
+                                     rng, spacing_jitter=0.05)
+        # outline follows the FILL edge (aura pullback included) — an
+        # outline at the raw occlusion edge floats in the white sliver
+        if "outline" in genes[i][0] and not fill.is_empty:
+            for ring in region_outline(fill):
                 bold.append(ring)
                 bold.append(ring + np.array([0.16, 0.11]))
     layers = {"black03": hatch}
