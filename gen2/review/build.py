@@ -928,32 +928,43 @@ def build_forms() -> dict:
     """The forming & angles arc (engine/formplan.py): photo -> form plan
     (committed level + angle per mass) -> patch-language render. The
     PLAN is shown as its own artifact — forming is judged before ink."""
-    from engine.formplan import build_form_plan, plan_viz, render_form_plan
+    from engine.formplan import (build_normal_form_plan, normals_viz,
+                                 plan_viz, render_form_plan)
     from engine.page import Page
     from engine.svgout import write_svg
 
     svg_dir = OUT / "svg"
     svg_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for photo, mrg in (("tests/fixtures/peak_src.png", 0.14),):
-        stem = Path(photo).stem
+    CFGS = (  # (suffix, k, blur_mm, snap_deg, spacing_scale, raster_px)
+        ("k6b2", 6, 2.0, 15.0, 1.0, 900),
+        ("k8b1", 8, 1.2, 15.0, 1.0, 900),
+        ("slope_fine", 10, 1.2, 0.0, 0.65, 1500),
+    )
+    for suffix, kk, blur, snap, spsc, rpx in CFGS:
+        photo = "tests/fixtures/peak_src.png"
+        stem = f"{Path(photo).stem}_{suffix}"
         try:
-            plan = build_form_plan(str(ROOT / photo), merge=mrg)
+            plan = build_normal_form_plan(str(ROOT / photo), k=kk,
+                                          blur_mm=blur, snap_deg=snap)
         except Exception as e:
             log.warning("forms: %s failed: %s", stem, e)
             continue
-        layers = render_form_plan(plan, np.random.default_rng(7))
+        layers = render_form_plan(plan, np.random.default_rng(7),
+                                  spacing_scale=spsc)
         page = Page(plan["w_mm"], plan["h_mm"], 0.0,
-                    plan["w_mm"] / 900, 0.0, 0.0)
-        img = _raster(layers, page, 900)
+                    plan["w_mm"] / rpx, 0.0, 0.0)
+        img = _raster(layers, page, rpx)
         hpx = img.shape[0]
         ph = cv2.resize(plan["bgr"], (int(hpx * plan["bgr"].shape[1]
                                           / plan["bgr"].shape[0]), hpx))
         pv = plan_viz(plan)
         pv = cv2.resize(pv, (int(hpx * pv.shape[1] / pv.shape[0]), hpx))
+        nv = normals_viz(plan)
+        nv = cv2.resize(nv, (int(hpx * nv.shape[1] / nv.shape[0]), hpx))
         gap = np.full((hpx, 10, 3), 255, np.uint8)
-        panel = np.concatenate([ph, gap, pv, gap, img], 1)
-        name = f"forms_{stem}"
+        panel = np.concatenate([nv, gap, pv, gap, img], 1)
+        name = f"nforms_{stem}"
         write_svg(layers, PENS, page, str(svg_dir / f"{name}.svg"))
         rows.append({
             "name": name, "svg": f"svg/{name}.svg",
