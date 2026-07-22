@@ -1079,6 +1079,62 @@ def _raw_normal_sheet(photo: str, K: int = 10,
                            cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)], 1)
 
 
+def _ridge_probe(photo: str):
+    """'Ridge lines everywhere' (docs/ridges-research.md probe #1):
+    multi-scale curvature of the normal map. Fold strength = extreme
+    eigenvalue of sym(d(nx,ny)/d(x,y)); fold axis = its eigenvector's
+    perpendicular; creases = thresholded+skeletonized strength ridges.
+    Panels: strength | axis field | crease lines over the photo."""
+    from skimage.morphology import skeletonize
+
+    from engine.scene import load_normals, load_semantic
+
+    pp = ROOT / photo
+    bgr = cv2.imread(str(pp))
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    H, W = gray.shape
+    nrm = load_normals(str(pp), (H, W))
+    sem = load_semantic(str(pp), (H, W))
+    sky = np.isin(sem["labels"],
+                  [i for i, n in sem["names"].items()
+                   if "sky" in n.lower()])
+    strength = np.zeros((H, W), np.float32)
+    axis = np.zeros((H, W), np.float32)
+    for sig in (2.0, 5.0, 10.0, 20.0):
+        ns = cv2.GaussianBlur(nrm, (0, 0), sig)
+        a = cv2.Sobel(ns[..., 0], cv2.CV_32F, 1, 0)
+        d = cv2.Sobel(ns[..., 1], cv2.CV_32F, 0, 1)
+        b = 0.5 * (cv2.Sobel(ns[..., 0], cv2.CV_32F, 0, 1)
+                   + cv2.Sobel(ns[..., 1], cv2.CV_32F, 1, 0))
+        half = np.sqrt(((a - d) / 2) ** 2 + b ** 2)
+        lam = np.abs((a + d) / 2) + half
+        s = sig * lam
+        th = 0.5 * np.arctan2(2 * b, a - d) + np.pi / 2  # crease axis
+        upd = s > strength
+        strength[upd] = s[upd]
+        axis[upd] = th[upd]
+    strength[sky] = 0
+    strength /= np.quantile(strength[~sky], 0.995) + 1e-9
+    strength = np.clip(strength, 0, 1)
+
+    p1 = cv2.applyColorMap((strength * 255).astype(np.uint8),
+                           cv2.COLORMAP_INFERNO)
+    hsv = np.stack([((axis % np.pi) / np.pi * 179).astype(np.uint8),
+                    np.full((H, W), 200, np.uint8),
+                    (strength * 255).astype(np.uint8)], -1)
+    p2 = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    crease = strength > np.quantile(strength[~sky], 0.86)
+    crease = cv2.morphologyEx(crease.astype(np.uint8), cv2.MORPH_CLOSE,
+                              np.ones((3, 3), np.uint8))
+    sk = skeletonize(crease > 0)
+    sk = cv2.dilate(sk.astype(np.uint8), np.ones((2, 2), np.uint8)) > 0
+    p3 = cv2.cvtColor((gray // 2 + 127).astype(np.uint8),
+                      cv2.COLOR_GRAY2BGR)
+    p3[sk] = (40, 40, 230)
+    gap = np.full((H, 12, 3), 255, np.uint8)
+    return np.concatenate([p1, gap, p2, gap, p3], 1)
+
+
 def build_forms() -> dict:
     """The forming & angles arc (engine/formplan.py): photo -> form plan
     (committed level + angle per mass) -> patch-language render. The
@@ -1171,6 +1227,21 @@ def build_forms() -> dict:
                      "img": f"experiments/forms/{apath.name}",
                      "history": [f"experiments/forms/{h}"
                                  for h in history]})
+
+    # ridge probe: ridge lines EVERYWHERE (docs/ridges-research.md)
+    panel = _ridge_probe("tests/fixtures/peak_src.png")
+    ok, buf = cv2.imencode(".png", panel)
+    hh = hashlib.sha1(buf.tobytes()).hexdigest()[:8]
+    apath = arch / f"ridge_probe__{hh}.png"
+    if not apath.exists():
+        apath.write_bytes(buf.tobytes())
+        log.info("forms archive: + %s", apath.name)
+    history = [f"experiments/forms/{q.name}" for q in
+               sorted(arch.glob("ridge_probe__*.png"),
+                      key=lambda q: q.stat().st_mtime)]
+    rows.append({"name": "ridge_probe (fold strength | fold axis | "
+                 "creases on photo)", "svg": "", "n_forms": 0,
+                 "levels": [], "img": history[-1], "history": history})
 
     # THE FULL ARCHIVE — every panel ever shown, grouped, regardless of
     # what configs exist today. Nothing leaves this list, ever.

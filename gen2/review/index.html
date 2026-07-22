@@ -279,6 +279,8 @@ function tunerView(t) {
     <span id="tSel" class="badge">no mass selected</span>
     <button id="tm15">-15°</button><button id="tm5">-5°</button>
     <button id="tp5">+5°</button><button id="tp15">+15°</button>
+    <button id="tsm">sp −</button><button id="tsp">sp +</button>
+    <button id="tlm">L−</button><button id="tlp">L+</button>
     <button id="tReset">reset class</button>
     <button id="tSave" style="background:#3b5bdb;color:#fff">save → claude</button>
     <span id="tMsg" class="s"></span>
@@ -300,16 +302,28 @@ async function tunerInit(t) {
   $id('tB').oninput = e => { TN.b = +e.target.value; tunerDraw(); };
   $id('tC').oninput = e => { TN.c = +e.target.value; tunerDraw(); };
   $id('tP').oninput = e => { TN.photoAlpha = +e.target.value; tunerDraw(); };
+  const ed = (k) => TN.edits[k] || (TN.edits[k] = {a: 0, s: 1});
   const nudge = (d) => { if (TN.sel < 0) return;
-    const key = TN.K + ':' + TN.sel;
-    TN.edits[key] = (TN.edits[key] || 0) + d; tunerDraw(); };
+    ed(TN.K + ':' + TN.sel).a += d; tunerDraw(); };
+  const spn = (f) => { if (TN.sel < 0) return;
+    const e2 = ed(TN.K + ':' + TN.sel);
+    e2.s = Math.min(4, Math.max(0.3, e2.s * f)); tunerDraw(); };
+  const lvn = (d) => { if (TN.sel < 0) return;
+    const e2 = ed(TN.K + ':' + TN.sel);
+    const c = TN.t.variants[TN.K].classes[TN.sel];
+    const cur = (e2.l ?? tunerLevel(c));
+    e2.l = Math.min(3, Math.max(0, cur + d)); tunerDraw(); };
   $id('tm15').onclick = () => nudge(-15); $id('tm5').onclick = () => nudge(-5);
   $id('tp5').onclick = () => nudge(5); $id('tp15').onclick = () => nudge(15);
+  $id('tsm').onclick = () => spn(1 / 1.2); $id('tsp').onclick = () => spn(1.2);
+  $id('tlm').onclick = () => lvn(-1); $id('tlp').onclick = () => lvn(1);
   $id('tReset').onclick = () => { delete TN.edits[TN.K + ':' + TN.sel]; tunerDraw(); };
   document.onkeydown = e => {
     if (TAB !== 'tuner') return;
     if (e.key === 'ArrowLeft') { nudge(e.shiftKey ? -15 : -5); e.preventDefault(); }
     if (e.key === 'ArrowRight') { nudge(e.shiftKey ? 15 : 5); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { spn(1.2); e.preventDefault(); }
+    if (e.key === 'ArrowDown') { spn(1 / 1.2); e.preventDefault(); }
   };
   can.onclick = e => {
     const r = can.getBoundingClientRect();
@@ -364,9 +378,10 @@ async function tunerLoadK(K) {
 function tunerAngles() {
   const t = TN.t, out = [];
   t.variants[TN.K].classes.forEach((c, k) => {
-    out.push({class: k,
-      angle: (c.angle + (TN.edits[TN.K + ':' + k] || 0)) % 180,
-      base: c.angle, level: tunerLevel(c)});
+    const e2 = TN.edits[TN.K + ':' + k] || {a: 0, s: 1};
+    out.push({class: k, angle: (c.angle + e2.a) % 180, base: c.angle,
+      level: (e2.l ?? tunerLevel(c)), level_forced: e2.l != null,
+      spacing_mult: e2.s});
   });
   return out;
 }
@@ -392,9 +407,10 @@ function tunerDraw() {
   const classes = t.variants[TN.K].classes;
   const diag = Math.hypot(t.w, t.h);
   classes.forEach((c, k) => {
-    const level = tunerLevel(c);
+    const e2 = TN.edits[TN.K + ':' + k] || {a: 0, s: 1};
+    const level = (e2.l ?? tunerLevel(c));
     if (level <= 0) return;
-    const ang = (c.angle + (TN.edits[TN.K + ':' + k] || 0)) * Math.PI / 180;
+    const ang = (c.angle + e2.a) * Math.PI / 180;
     const tc = TN.tmp.getContext('2d');
     tc.globalCompositeOperation = 'source-over';
     tc.clearRect(0, 0, t.w, t.h);
@@ -402,7 +418,7 @@ function tunerDraw() {
     tc.translate(t.w / 2, t.h / 2); tc.rotate(ang);
     tc.strokeStyle = '#1a1a1a'; tc.lineWidth = 1.1;
     tc.beginPath();
-    const sp = TSP[level];
+    const sp = TSP[level] * (e2.s || 1);
     for (let o = -diag / 2; o <= diag / 2; o += sp) {
       tc.moveTo(-diag / 2, o); tc.lineTo(diag / 2, o);
     }
@@ -421,11 +437,11 @@ function tunerDraw() {
     tc.drawImage(TN.masks[TN.sel], 0, 0);
     ctx.drawImage(TN.tmp, 0, 0);
     const c = TN.t.variants[TN.K].classes[TN.sel];
-    const off = TN.edits[TN.K + ':' + TN.sel] || 0;
+    const e2 = TN.edits[TN.K + ':' + TN.sel] || {a: 0, s: 1};
     document.getElementById('tSel').textContent =
-      `mass ${TN.sel}: ${(c.angle + off).toFixed(0)}°` +
-      (off ? ` (base ${c.angle}° ${off > 0 ? '+' : ''}${off})` : '') +
-      ` · L${tunerLevel(c)}`;
+      `mass ${TN.sel}: ${(c.angle + e2.a).toFixed(0)}°` +
+      ` · L${e2.l ?? tunerLevel(c)}${e2.l != null ? ' (forced)' : ''}` +
+      (e2.s !== 1 ? ` · sp ×${e2.s.toFixed(2)}` : '');
   } else {
     const el = document.getElementById('tSel');
     if (el) el.textContent = 'no mass selected';
