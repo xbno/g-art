@@ -928,7 +928,8 @@ def _raw_normal_sheet(photo: str, K: int = 10,
                       value_qs=(0.10, 0.30, 0.60),
                       angle_mode: str = "center",
                       dark_speckle: bool = False,
-                      amp: float = 1.0):
+                      amp: float = 1.0,
+                      curve_amp: float = 0.0):
     """PIXEL-TRUE posterize render — zero geometry cleanup, so the
     marigold's character (couloirs, jagged tree texture) survives.
     Per class: exact fall-line angle; value level from relit shade
@@ -973,6 +974,18 @@ def _raw_normal_sheet(photo: str, K: int = 10,
     diag = int(np.hypot(H, W)) * S
     SP = {1: 15, 2: 10, 3: 6}  # spacing px at 2x, per level
 
+    disp = None
+    if curve_amp > 0:
+        # shared low-frequency displacement field: every line in every
+        # family bends the SAME gentle way, so curves flow while spacing
+        # and quasi-parallelism survive (the artist's breathing lines)
+        rng_d = np.random.default_rng(11)
+        coarse = rng_d.standard_normal((H // 24 + 2, W // 24 + 2))
+        coarse = cv2.GaussianBlur(coarse.astype(np.float32), (0, 0), 2.2)
+        disp = cv2.resize(coarse, (W * S, H * S),
+                          interpolation=cv2.INTER_CUBIC)
+        disp *= curve_amp * S / (np.abs(disp).max() + 1e-9)
+
     def hatch_mask(mask, th, level):
         d = np.array([np.cos(th), np.sin(th)])
         nv = np.array([-d[1], d[0]])
@@ -980,9 +993,18 @@ def _raw_normal_sheet(photo: str, K: int = 10,
         c0 = np.array([W * S / 2, H * S / 2])
         for off in range(-diag // 2, diag // 2, SP[level]):
             p = c0 + nv * off
-            a = (p - d * diag).astype(int)
-            b = (p + d * diag).astype(int)
-            cv2.line(canvas, tuple(a), tuple(b), 255, 2, cv2.LINE_AA)
+            if disp is None:
+                a = (p - d * diag).astype(int)
+                b = (p + d * diag).astype(int)
+                cv2.line(canvas, tuple(a), tuple(b), 255, 2, cv2.LINE_AA)
+            else:
+                ts = np.arange(-diag, diag, 14)
+                pts = p[None] + d[None] * ts[:, None]
+                xi = np.clip(pts[:, 0], 0, W * S - 1).astype(int)
+                yi = np.clip(pts[:, 1], 0, H * S - 1).astype(int)
+                pts = pts + nv[None] * disp[yi, xi][:, None]
+                cv2.polylines(canvas, [np.round(pts).astype(np.int32)],
+                              False, 255, 2, cv2.LINE_AA)
         mbig = cv2.resize(mask.astype(np.uint8), (W * S, H * S),
                           interpolation=cv2.INTER_NEAREST)
         out[(canvas > 127) & (mbig > 0)] = 0
@@ -1007,6 +1029,17 @@ def _raw_normal_sheet(photo: str, K: int = 10,
                 t2 = 2 * np.arctan2(fy[mask], fx[mask])
                 th = 0.5 * np.arctan2(np.sin(t2).mean(),
                                       np.cos(t2).mean())
+            elif angle_mode == "chiral":
+                # TWO stroke families, the ridge as the flip (user):
+                # keep each class's plunge MAGNITUDE from its fall line,
+                # but the SIGN comes from which way the face points —
+                # faces-left drains down-left, everything else
+                # down-right. Density untouched; the ridge emerges from
+                # direction alone.
+                n = ctr[k]
+                a = ((np.degrees(np.arctan2(n[1], n[0])) + 90) % 180) - 90
+                m = abs(a)
+                th = np.radians(m if n[0] >= 0 else 180 - m)
             else:
                 n = ctr[k]
                 th = np.arctan2(n[1], n[0])
@@ -1117,7 +1150,10 @@ def build_forms() -> dict:
                                 "dark_speckle": True}),
            ("raw_shadow1", {"angle_mode": "shadow1",
                             "dark_speckle": True}),
-           ("raw10_ampdark", {"amp": 1.35, "dark_speckle": True}))
+           ("raw10_ampdark", {"amp": 1.35, "dark_speckle": True}),
+           ("raw_chiral", {"angle_mode": "chiral"}),
+           ("raw_chiral_curve", {"angle_mode": "chiral",
+                                 "curve_amp": 6.0}))
     for rname, kw in RAW:
         panel = _raw_normal_sheet("tests/fixtures/peak_src.png", K=10,
                                   **kw)
